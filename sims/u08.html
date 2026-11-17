@@ -1,0 +1,180 @@
+<!doctype html>
+<html lang="zh-Hant-TW">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>推論與機率</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@400;600&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+:root{--bg:#0E0F12;--line:#2A2D35;--txt:#EDE6D6;--sub:#9A9384;--gold:#D4A84B;--blue:#6FA3D8;--tru:#5FB8A6;--fal:#C9644A;--m5:#8E86D6}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{background:var(--bg);color:var(--txt);font-family:"Noto Serif TC","PingFang TC",serif;-webkit-tap-highlight-color:transparent;overflow-x:hidden}
+body{background-image:linear-gradient(rgba(237,230,214,.035) 1px,transparent 1px),linear-gradient(90deg,rgba(237,230,214,.035) 1px,transparent 1px);background-size:22px 22px;min-height:100vh}
+.mono{font-family:"JetBrains Mono",ui-monospace,Menlo,monospace}
+#app{max-width:980px;margin:0 auto;padding:12px;display:grid;gap:10px;grid-template-columns:minmax(0,1.15fr) minmax(0,1fr);grid-template-areas:"head head" "inp inp" "map read"}
+@media (max-width:760px){#app{grid-template-columns:minmax(0,1fr);grid-template-areas:"head" "inp" "map" "read";padding:10px}}
+header{grid-area:head}
+header h1{font-size:18px;font-weight:600;color:var(--m5)}
+header p{font-size:13px;color:var(--sub);margin-top:2px}
+.box{background:rgba(21,23,28,.92);border:1px solid var(--line);border-radius:10px;padding:10px;min-width:0}
+#inp{grid-area:inp;display:grid;gap:8px}
+.frow{display:flex;gap:8px;align-items:center;min-width:0}
+.frow .lab{flex:0 0 auto;font-weight:600;font-size:14px;width:56px}
+.frow input{flex:1;min-width:0;background:#0B0C0F;border:1px solid var(--line);border-radius:8px;color:var(--txt);font:600 17px "JetBrains Mono",monospace;padding:8px 10px;outline:none}
+#fa{border-color:rgba(212,168,75,.6)}#fb{border-color:rgba(95,184,166,.6)}
+.err{color:var(--fal);font-size:12px;min-height:1em}
+button{background:#1C1F26;color:var(--txt);border:1px solid var(--line);border-radius:8px;font:inherit;font-size:14px;cursor:pointer;min-height:34px;padding:4px 10px;touch-action:manipulation}
+button:active{background:#262A33}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chips button{font-family:"JetBrains Mono",monospace;font-size:12.5px;min-height:32px}
+.keys{display:flex;flex-wrap:wrap;gap:5px}
+.keys button{font-family:"JetBrains Mono",monospace;min-width:34px;font-size:15px}
+#map{grid-area:map}
+#read{grid-area:read;display:flex;flex-direction:column;gap:10px}
+h2{font-size:14px;font-weight:600;margin-bottom:6px}
+#tiles{display:grid;gap:6px}
+.tile{border-radius:8px;padding:6px 4px 5px;text-align:center;font-family:"JetBrains Mono",monospace;font-size:11px;border:2px solid transparent;background:#111318;position:relative;min-width:0}
+.tile.A{border-color:var(--gold)}
+.tile.B{background:rgba(95,184,166,.22)}
+.tile.AB{background:rgba(95,184,166,.42)}
+.tile .vv{display:flex;justify-content:center;gap:2px;flex-wrap:wrap}
+.tile .vv span{padding:0 2px}
+.tile .vv .t{color:var(--tru)}.tile .vv .f{color:var(--fal)}
+.tile .mk{font-size:10px;color:var(--sub);margin-top:2px;min-height:12px}
+.legend{display:flex;flex-wrap:wrap;gap:10px;font-size:12px;color:var(--sub);margin-top:8px}
+.legend i{display:inline-block;width:14px;height:12px;border-radius:3px;vertical-align:-1px;margin-right:4px}
+.big{font-size:28px;font-weight:600;font-family:"JetBrains Mono",monospace}
+.kv{font-size:13px;color:var(--sub);line-height:1.75}
+.kv b{color:var(--txt)}
+.bar{height:14px;border-radius:7px;background:#22252C;overflow:hidden;margin:6px 0 2px}
+.bar i{display:block;height:100%;background:var(--tru);transition:width .35s}
+.verdict{font-size:14px;line-height:1.7}
+.ok{color:var(--tru)}.no{color:var(--fal)}
+.note{font-size:12px;color:var(--sub);line-height:1.6}
+</style>
+</head>
+<body>
+<div id="app">
+  <header><h1>推論與機率</h1><p>推論＝真值根據的包含（5.12）；機率＝真值根據的比例（5.15）。</p></header>
+  <section id="inp" class="box">
+    <div class="frow"><span class="lab" style="color:var(--gold)">命題 A</span><input id="fa" value="p ∨ q" aria-label="命題 A" autocomplete="off" autocapitalize="off" spellcheck="false"></div>
+    <div class="err" id="ea"></div>
+    <div class="frow"><span class="lab" style="color:var(--tru)">命題 B</span><input id="fb" value="p" aria-label="命題 B" autocomplete="off" autocapitalize="off" spellcheck="false"></div>
+    <div class="err" id="eb"></div>
+    <div class="keys" id="keys"></div>
+    <div class="chips" id="presets"></div>
+    <div class="note">5.15 的記號對應：A 是「給出機率」的命題 r，B 是「被給予機率」的命題 s。可用符號同真值表產生器：~、∧、∨、→、↔、括號，變項 p q r s。</div>
+  </section>
+  <section id="map" class="box">
+    <h2>真值可能性（每格一種）</h2>
+    <div id="tiles"></div>
+    <div class="legend"><span><i style="border:2px solid var(--gold)"></i>A 的真值根據</span><span><i style="background:rgba(95,184,166,.22)"></i>B 的真值根據</span><span><i style="background:rgba(95,184,166,.42);border:2px solid var(--gold)"></i>共同的真值根據</span></div>
+  </section>
+  <section id="read">
+    <div class="box">
+      <div class="note">A 給 B 的機率（5.15）＝ W<sub>AB</sub> : W<sub>A</sub></div>
+      <div class="big" id="pAB">—</div>
+      <div class="bar"><i id="barAB" style="width:0"></i></div>
+      <div class="kv" id="kvAB"></div>
+    </div>
+    <div class="box">
+      <div class="note">反方向：B 給 A 的機率＝ W<sub>AB</sub> : W<sub>B</sub></div>
+      <div class="big" id="pBA" style="font-size:22px">—</div>
+      <div class="bar"><i id="barBA" style="width:0;background:var(--gold)"></i></div>
+    </div>
+    <div class="box verdict" id="verdict"></div>
+    <div class="row" style="display:flex;gap:8px"><button id="swap">⇅ 交換 A、B</button></div>
+  </section>
+</div>
+<script>
+(() => {
+"use strict";
+const $ = id => document.getElementById(id);
+// ---------- 解析器（與 u07 相同：~ > ∧ > ∨ > → > ↔，→ 右結合）
+function norm(s) {
+  return s.toLowerCase().replace(/<->|<=>/g, "↔").replace(/->|=>/g, "→").replace(/[≡]/g, "↔").replace(/[⊃]/g, "→")
+    .replace(/[¬!\-]/g, "~").replace(/[&.·]/g, "∧").replace(/[|v+]/g, "∨");
+}
+function parse(s) {
+  const src = norm(s), t = [];
+  for (let i = 0; i < src.length; i++) { const c = src[i]; if (/\s/.test(c)) continue; if ("~∧∨→↔()pqrs".includes(c)) t.push(c); else throw `不認得的符號「${c}」`; }
+  if (!t.length) throw "請輸入命題式";
+  let k = 0; const peek = () => t[k];
+  function iff() { let a = imp(); while (peek() === "↔") { k++; a = { op: "↔", a, b: imp() }; } return a; }
+  function imp() { const a = orr(); if (peek() === "→") { k++; return { op: "→", a, b: imp() }; } return a; }
+  function orr() { let a = and(); while (peek() === "∨") { k++; a = { op: "∨", a, b: and() }; } return a; }
+  function and() { let a = neg(); while (peek() === "∧") { k++; a = { op: "∧", a, b: neg() }; } return a; }
+  function neg() {
+    const c = peek();
+    if (c === "~") { k++; return { op: "~", a: neg() }; }
+    if (c === "(") { k++; const a = iff(); if (peek() !== ")") throw "少了「)」"; k++; return a; }
+    if (c && "pqrs".includes(c)) { k++; return { v: c }; }
+    throw c ? `這裡需要變項或「(」，卻看到「${c}」` : "式子不完整";
+  }
+  const a = iff(); if (k < t.length) throw `多出了「${t[k]}」`; return a;
+}
+function ev(n, e) { if (n.v) return e[n.v]; if (n.op === "~") return !ev(n.a, e); const x = ev(n.a, e), y = ev(n.b, e);
+  return n.op === "∧" ? x && y : n.op === "∨" ? x || y : n.op === "→" ? (!x || y) : x === y; }
+function varsOf(n, s = new Set()) { if (n.v) s.add(n.v); else { varsOf(n.a, s); if (n.b) varsOf(n.b, s); } return s; }
+const gcd = (a, b) => b ? gcd(b, a % b) : a;
+const frac = (a, b) => { const g = gcd(a, b) || 1; return b / g === 1 ? String(a / g) : `${a / g}/${b / g}`; };
+
+// ---------- 介面元件
+let focus = "fa";
+["fa", "fb"].forEach(id => { $(id).addEventListener("focus", () => focus = id); $(id).addEventListener("input", run); });
+["p", "q", "r", "s", "~", "∧", "∨", "→", "↔", "(", ")", "⌫"].forEach(k => {
+  const b = document.createElement("button"); b.textContent = k;
+  b.onmousedown = e => e.preventDefault();
+  b.onclick = () => { const f = $(focus); const s = f.selectionStart ?? f.value.length, e = f.selectionEnd ?? f.value.length;
+    if (k === "⌫") { if (s !== e) f.value = f.value.slice(0, s) + f.value.slice(e); else if (s > 0) { f.value = f.value.slice(0, s - 1) + f.value.slice(s); f.setSelectionRange(s - 1, s - 1); } }
+    else { f.value = f.value.slice(0, s) + k + f.value.slice(e); f.setSelectionRange(s + 1, s + 1); }
+    run(); };
+  $("keys").appendChild(b);
+});
+const PRE = [["p ∨ q", "p"], ["p", "p ∨ q"], ["q", "p"], ["p ∧ q", "q"], ["p → q", "q"], ["p ∨ ~p", "p"], ["p ∧ ~p", "p"], ["p ∨ q ∨ r", "p"], ["(p∨q)∧(r∨~r)", "p"]];
+PRE.forEach(([a, b]) => { const x = document.createElement("button"); x.textContent = `${a}｜${b}`; x.onclick = () => { $("fa").value = a; $("fb").value = b; run(); }; $("presets").appendChild(x); });
+$("swap").onclick = () => { const t = $("fa").value; $("fa").value = $("fb").value; $("fb").value = t; run(); };
+
+function run() {
+  let A, B, bad = false;
+  try { A = parse($("fa").value); $("ea").textContent = ""; } catch (e) { $("ea").textContent = "⚠ " + e; bad = true; }
+  try { B = parse($("fb").value); $("eb").textContent = ""; } catch (e) { $("eb").textContent = "⚠ " + e; bad = true; }
+  ["map", "read"].forEach(id => $(id).style.opacity = bad ? 0.35 : 1);
+  if (bad) return;
+  const va = varsOf(A), vb = varsOf(B), vs = [...new Set([...va, ...vb])].sort(), n = vs.length, rows = 1 << n;
+  // 列舉真值可能性（第 j 個變項在 i 的第 j 位元為 1 時取 F）
+  const TA = [], TB = [];
+  let html = "";
+  for (let i = 0; i < rows; i++) {
+    const env = {}; vs.forEach((v, j) => env[v] = !((i >> j) & 1));
+    const a = ev(A, env), b = ev(B, env); TA.push(a); TB.push(b);
+    html += `<div class="tile ${a ? "A" : ""} ${b ? (a ? "AB" : "B") : ""}"><div class="vv">${vs.map(v => `<span class="${env[v] ? "t" : "f"}">${v}${env[v] ? "W" : "F"}</span>`).join("")}</div><div class="mk">${a && b ? "A・B" : a ? "A" : b ? "B" : ""}</div></div>`;
+  }
+  const cols = n <= 1 ? 2 : n === 2 ? 4 : n === 3 ? 4 : 4;
+  $("tiles").style.gridTemplateColumns = `repeat(${cols},minmax(0,1fr))`;
+  $("tiles").innerHTML = html;
+  const WA = TA.filter(Boolean).length, WB = TB.filter(Boolean).length, WAB = TA.filter((a, i) => a && TB[i]).length;
+  // A 給 B
+  if (WA === 0) { $("pAB").textContent = "沒有定義"; $("barAB").style.width = "0"; }
+  else { $("pAB").textContent = `${frac(WAB, WA)}  ≈ ${(WAB / WA).toFixed(3)}`; $("barAB").style.width = (100 * WAB / WA) + "%"; }
+  $("kvAB").innerHTML = `變項 <b class="mono">${vs.join(", ")}</b>・真值可能性 <b>${rows}</b> 種<br>W<sub>A</sub>（A 的真值根據數）＝<b>${WA}</b>・W<sub>B</sub>＝<b>${WB}</b>・W<sub>AB</sub>（共同）＝<b>${WAB}</b>`
+    + (WA === 0 ? `<br><span class="no">A 是矛盾式，沒有真值根據，分母為 0：它不給任何命題機率（5.152 括號：應用於矛盾式）。</span>` : "");
+  if (WB === 0) { $("pBA").textContent = "沒有定義"; $("barBA").style.width = "0"; }
+  else { $("pBA").textContent = `${frac(WAB, WB)}  ≈ ${(WAB / WB).toFixed(3)}`; $("barBA").style.width = (100 * WAB / WB) + "%"; }
+  // 推論與獨立
+  const AinB = TA.every((a, i) => !a || TB[i]), BinA = TB.every((b, i) => !b || TA[i]);
+  const shared = [...va].filter(v => vb.has(v));
+  let v = "";
+  v += WA === 0 ? `<div class="note">A 沒有真值根據：空集合形式上包含在任何命題的真值根據裡，但 5.15 的比值分母為 0，沒有定義。</div>` : AinB ? `<div class="ok">✓ B 從 A 推出：A 的真值根據全部包含在 B 的真值根據裡（5.12），A 給 B 的機率為 1（5.152）。</div>` : `<div class="no">✗ B 不能從 A 推出：有 ${WA - WAB} 種情況 A 真而 B 假。</div>`;
+  v += BinA ? `<div class="ok">✓ A 從 B 推出：B 的真值根據全部包含在 A 的真值根據裡。</div>` : `<div class="no">✗ A 不能從 B 推出：有 ${WB - WAB} 種情況 B 真而 A 假。</div>`;
+  if (!shared.length) v += `<div class="note" style="margin-top:4px">A 與 B 沒有共同的真值主目，依 5.152 稱為彼此獨立。</div>`;
+  if (WA === rows) v += `<div class="note" style="margin-top:4px">A 是重言式：它把整個邏輯空間都留著，所以它給 B 的機率就是 B 在全部可能中所佔的比例。</div>`;
+  if (WB === rows) v += `<div class="note" style="margin-top:4px">B 是重言式：從任何命題都能推出它。</div>`;
+  $("verdict").innerHTML = v;
+}
+run();
+})();
+</script>
+</body>
+</html>

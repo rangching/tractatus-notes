@@ -1,0 +1,252 @@
+<!doctype html>
+<html lang="zh-Hant-TW">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>真值表產生器</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@400;600&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+:root{--bg:#0E0F12;--panel:#15171C;--line:#2A2D35;--txt:#EDE6D6;--sub:#9A9384;--gold:#D4A84B;--blue:#6FA3D8;--tru:#5FB8A6;--fal:#C9644A;--m4:#6FA3D8}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{background:var(--bg);color:var(--txt);font-family:"Noto Serif TC","PingFang TC",serif;-webkit-tap-highlight-color:transparent;overflow-x:hidden}
+body{background-image:linear-gradient(rgba(237,230,214,.035) 1px,transparent 1px),linear-gradient(90deg,rgba(237,230,214,.035) 1px,transparent 1px);background-size:22px 22px;min-height:100vh}
+.mono{font-family:"JetBrains Mono",ui-monospace,Menlo,monospace}
+#app{max-width:980px;margin:0 auto;padding:12px;display:grid;gap:10px;grid-template-columns:minmax(0,1.1fr) minmax(0,1fr);grid-template-areas:"head head" "inp inp" "tab side"}
+@media (max-width:760px){#app{grid-template-columns:minmax(0,1fr);grid-template-areas:"head" "inp" "side" "tab";padding:10px}}
+header{grid-area:head}
+header h1{font-size:18px;font-weight:600;color:var(--gold)}
+header p{font-size:13px;color:var(--sub);margin-top:2px}
+.box{background:rgba(21,23,28,.92);border:1px solid var(--line);border-radius:10px;padding:10px;min-width:0}
+#inp{grid-area:inp;display:flex;flex-direction:column;gap:8px}
+.row{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+#f{flex:1 1 220px;min-width:0;background:#0B0C0F;border:1px solid var(--line);border-radius:8px;color:var(--txt);font:600 18px "JetBrains Mono",monospace;padding:9px 10px;outline:none}
+#f:focus{border-color:var(--blue)}
+button{background:#1C1F26;color:var(--txt);border:1px solid var(--line);border-radius:8px;font:inherit;font-size:14px;cursor:pointer;min-height:36px;padding:4px 10px;touch-action:manipulation}
+button:active{background:#262A33}
+button.k{font-family:"JetBrains Mono",monospace;min-width:38px;font-size:16px}
+button.k.v{color:var(--blue)}
+button.on{border-color:var(--gold);color:var(--gold)}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chips button{font-family:"JetBrains Mono",monospace;font-size:13px;min-height:32px}
+#err{color:var(--fal);font-size:13px;min-height:1.2em}
+#tab{grid-area:tab;overflow:hidden}
+.tw{overflow-x:auto;max-width:100%}
+table{border-collapse:collapse;font-family:"JetBrains Mono",monospace;font-size:14px;margin:0 auto}
+th,td{padding:4px 9px;text-align:center;border-bottom:1px solid #22252C;white-space:nowrap}
+th{color:var(--blue);font-weight:600;font-size:13px}
+th.main{color:var(--gold)}
+td.idx{color:var(--sub);font-size:11px}
+td.T{color:var(--tru)}td.F{color:var(--fal)}
+td.main{font-weight:600}
+td.main.T{background:rgba(95,184,166,.14)}td.main.F{background:rgba(201,100,74,.12)}
+#side{grid-area:side;display:flex;flex-direction:column;gap:10px}
+.badge{display:inline-block;padding:3px 10px;border-radius:99px;font-size:15px;font-weight:600;border:1px solid}
+.b-t{color:var(--gold);border-color:var(--gold)}.b-c{color:var(--fal);border-color:var(--fal)}.b-o{color:var(--tru);border-color:var(--tru)}
+.kv{font-size:13px;color:var(--sub);line-height:1.7}
+.kv b{color:var(--txt);font-weight:600}
+.kv .mono b{font-family:"JetBrains Mono",monospace}
+#strip{display:flex;gap:3px;flex-wrap:wrap;margin-top:6px}
+#strip i{flex:1 0 14px;height:20px;border-radius:3px;display:block}
+h2{font-size:14px;font-weight:600;color:var(--txt);margin-bottom:6px}
+#grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:5px}
+.cell{border:1px solid var(--line);border-radius:7px;padding:5px 4px;font-size:11px;text-align:center;cursor:pointer;background:#111318;min-width:0}
+.cell .dots{display:flex;justify-content:center;gap:3px;margin-bottom:3px}
+.cell .dots i{width:9px;height:9px;border-radius:50%;display:block}
+.cell .nm{font-family:"JetBrains Mono",monospace;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cell .no{color:var(--sub);font-size:10px}
+.cell.hit{border-color:var(--gold);box-shadow:0 0 0 1px var(--gold) inset;background:#1d1a12}
+.note{font-size:12px;color:var(--sub);line-height:1.6}
+label.tg{font-size:13px;color:var(--sub);display:flex;align-items:center;gap:6px}
+</style>
+</head>
+<body>
+<div id="app">
+  <header><h1>真值表產生器</h1><p>輸入命題式，逐列算出真值表（4.31），判定重言式、矛盾式或偶然命題（4.46）。</p></header>
+
+  <section id="inp" class="box">
+    <div class="row">
+      <input id="f" type="text" autocomplete="off" autocapitalize="off" spellcheck="false" aria-label="命題式" value="p → q">
+      <button id="bWF" title="切換顯示方式">真／假</button>
+    </div>
+    <div class="row" id="keys"></div>
+    <div class="chips" id="presets"></div>
+    <div id="err"></div>
+    <div class="note">可用符號：否定 <span class="mono">~ ¬ !</span>、且 <span class="mono">∧ &amp; .</span>、或 <span class="mono">∨ v |</span>、如果…那麼 <span class="mono">→ ⊃ -&gt;</span>、等值 <span class="mono">↔ ≡ &lt;-&gt;</span>、括號；變項 <span class="mono">p q r s</span>。優先序：~ ＞ ∧ ＞ ∨ ＞ → ＞ ↔（→ 由右結合）。</div>
+  </section>
+
+  <section id="tab" class="box">
+    <div class="row" style="justify-content:space-between;margin-bottom:6px">
+      <h2 style="margin:0">真值表</h2>
+      <label class="tg"><input type="checkbox" id="steps"> 顯示中間步驟</label>
+    </div>
+    <div class="tw"><table id="tbl"></table></div>
+  </section>
+
+  <section id="side">
+    <div class="box">
+      <div id="kind"></div>
+      <div class="kv" id="info" style="margin-top:6px"></div>
+      <div id="strip" aria-label="邏輯空間條"></div>
+      <div class="note" id="stripNote" style="margin-top:4px"></div>
+    </div>
+    <div class="box">
+      <h2>p、q 的 16 種真值函數（依 5.101 原書順序）</h2>
+      <div id="grid"></div>
+      <div class="note" id="gridNote" style="margin-top:6px">點一格，把它的代表式子放進輸入框。圓點由左到右是 (p,q)＝(W,W)、(F,W)、(W,F)、(F,F)。</div>
+    </div>
+  </section>
+</div>
+<script>
+(() => {
+"use strict";
+const $ = id => document.getElementById(id);
+let useWF = false;
+
+// ---------- 詞法與語法分析（優先序 ~ > ∧ > ∨ > → > ↔，→ 右結合）
+function norm(s) {
+  return s.toLowerCase()
+    .replace(/<->|<=>/g, "↔").replace(/->|=>/g, "→")
+    .replace(/[≡]/g, "↔").replace(/[⊃]/g, "→")
+    .replace(/[¬!\-]/g, "~").replace(/[&.·]/g, "∧").replace(/[|v+]/g, "∨");
+}
+function tokenize(s) {
+  const t = [], src = norm(s);
+  for (let i = 0; i < src.length; i++) {
+    const c = src[i];
+    if (/\s/.test(c)) continue;
+    if ("~∧∨→↔()pqrs".includes(c)) t.push({ c, i }); else throw { msg: `不認得的符號「${c}」`, i };
+  }
+  return t;
+}
+function parse(s) {
+  const t = tokenize(s); let k = 0;
+  if (!t.length) throw { msg: "請輸入命題式", i: 0 };
+  const peek = () => t[k] ? t[k].c : null;
+  const eat = c => { if (peek() !== c) throw { msg: peek() ? `這裡應該是「${c}」，卻看到「${peek()}」` : `少了「${c}」`, i: t[k] ? t[k].i : s.length }; k++; };
+  function iff() { let a = imp(); while (peek() === "↔") { k++; a = { op: "↔", a, b: imp() }; } return a; }
+  function imp() { const a = orr(); if (peek() === "→") { k++; return { op: "→", a, b: imp() }; } return a; }
+  function orr() { let a = and(); while (peek() === "∨") { k++; a = { op: "∨", a, b: and() }; } return a; }
+  function and() { let a = neg(); while (peek() === "∧") { k++; a = { op: "∧", a, b: neg() }; } return a; }
+  function neg() {
+    const c = peek();
+    if (c === "~") { k++; return { op: "~", a: neg() }; }
+    if (c === "(") { k++; const a = iff(); eat(")"); return a; }
+    if (c && "pqrs".includes(c)) { k++; return { v: c }; }
+    throw { msg: c ? `這裡需要變項或「(」，卻看到「${c}」` : "式子不完整", i: t[k] ? t[k].i : s.length };
+  }
+  const a = iff();
+  if (k < t.length) throw { msg: `多出了「${t[k].c}」`, i: t[k].i };
+  return a;
+}
+const PREC = { "↔": 1, "→": 2, "∨": 3, "∧": 4, "~": 5 };
+function show(n, parent = 0, right = false) {
+  if (n.v) return n.v;
+  if (n.op === "~") return "~" + show(n.a, 5);
+  const p = PREC[n.op];
+  let s = show(n.a, p, false) + " " + n.op + " " + show(n.b, p, true);
+  const need = p < parent || (p === parent && ((n.op === "→" && !right) || (n.op !== "→" && right)));
+  return need ? "(" + s + ")" : s;
+}
+function ev(n, env) {
+  if (n.v) return env[n.v];
+  if (n.op === "~") return !ev(n.a, env);
+  const x = ev(n.a, env), y = ev(n.b, env);
+  return n.op === "∧" ? x && y : n.op === "∨" ? x || y : n.op === "→" ? (!x || y) : x === y;
+}
+function varsOf(n, set = new Set()) { if (n.v) set.add(n.v); else { varsOf(n.a, set); if (n.b) varsOf(n.b, set); } return set; }
+function subs(n, out = []) { if (n.v) return out; subs(n.a, out); if (n.b) subs(n.b, out); out.push(n); return out; }
+
+// 真值可能性的排列：第 i 列中第 j 個變項在 i 的第 j 位元為 1 時取 F（兩個變項時 = 5.101 的 WW、FW、WF、FF）
+function column(n, vs) {
+  const col = [];
+  for (let i = 0; i < (1 << vs.length); i++) {
+    const env = {}; vs.forEach((v, j) => env[v] = !((i >> j) & 1));
+    col.push(ev(n, env));
+  }
+  return col;
+}
+
+// ---------- 5.101 的 16 個真值函數
+const W101 = [
+  ["WWWW", "p∨~p", "重言式"], ["FWWW", "~(p∧q)", "並非 p 且 q"], ["WFWW", "q→p", "若 q 則 p"], ["WWFW", "p→q", "若 p 則 q"],
+  ["WWWF", "p∨q", "p 或 q"], ["FFWW", "~q", "非 q"], ["FWFW", "~p", "非 p"], ["FWWF", "(p∧~q)∨(q∧~p)", "p 或 q 但非兩者"],
+  ["WFFW", "p↔q", "p 當且僅當 q"], ["WFWF", "p", "p"], ["WWFF", "q", "q"], ["FFFW", "~p∧~q", "既非 p 也非 q"],
+  ["FFWF", "p∧~q", "p 且非 q"], ["FWFF", "q∧~p", "q 且非 p"], ["WFFF", "p∧q", "p 且 q"], ["FFFF", "p∧~p", "矛盾式"]
+];
+const wstr = col => col.map(v => v ? "W" : "F").join("");
+
+// ---------- 介面
+const T = v => useWF ? (v ? "W" : "F") : (v ? "真" : "假");
+const KEYS = ["p", "q", "r", "s", "~", "∧", "∨", "→", "↔", "(", ")", "⌫", "清除"];
+KEYS.forEach(k => {
+  const b = document.createElement("button"); b.className = "k" + ("pqrs".includes(k) ? " v" : ""); b.textContent = k;
+  if (k === "清除") b.style.fontFamily = "inherit";
+  b.onclick = () => {
+    const f = $("f"), s = f.selectionStart ?? f.value.length, e = f.selectionEnd ?? f.value.length;
+    if (k === "清除") { f.value = ""; }
+    else if (k === "⌫") { if (s !== e) f.value = f.value.slice(0, s) + f.value.slice(e); else if (s > 0) { f.value = f.value.slice(0, s - 1) + f.value.slice(s); f.setSelectionRange(s - 1, s - 1); } }
+    else { f.value = f.value.slice(0, s) + k + f.value.slice(e); f.setSelectionRange(s + k.length, s + k.length); }
+    run();
+  };
+  $("keys").appendChild(b);
+});
+const PRESETS = ["p ∨ ~p", "p ∧ ~p", "p → q", "~(p∧q)", "~p ∨ ~q", "(p→q)∧p → q", "p ↔ q", "(p→q)∧(q→r) → (p→r)", "p → (q∨r)", "(p∨q)∧(r∨s)"];
+PRESETS.forEach(s => { const b = document.createElement("button"); b.textContent = s; b.onclick = () => { $("f").value = s; run(); }; $("presets").appendChild(b); });
+W101.forEach(([w, f, name], i) => {
+  const d = document.createElement("div"); d.className = "cell"; d.dataset.w = w;
+  d.innerHTML = `<div class="dots">${[...w].map(c => `<i style="background:${c === "W" ? "var(--tru)" : "var(--fal)"}"></i>`).join("")}</div><div class="nm">${f}</div><div class="no">第 ${i + 1} 號</div>`;
+  d.title = name; d.onclick = () => { $("f").value = f; run(); };
+  $("grid").appendChild(d);
+});
+$("bWF").onclick = () => { useWF = !useWF; $("bWF").textContent = useWF ? "W／F" : "真／假"; $("bWF").classList.toggle("on", useWF); run(); };
+$("f").addEventListener("input", run);
+$("steps").addEventListener("change", run);
+
+function dim(on) { ["tab", "side"].forEach(id => $(id).style.opacity = on ? 0.35 : 1); }
+function run() {
+  const s = $("f").value; let tree;
+  try { tree = parse(s); $("err").textContent = ""; }
+  catch (e) { $("err").textContent = "⚠ " + (e.msg || "無法解析") + (e.i != null ? `（第 ${e.i + 1} 個字附近）` : ""); dim(true); return; }
+  dim(false);
+  const vs = [...varsOf(tree)].sort(), n = vs.length, rows = 1 << n;
+  const col = column(tree, vs);
+  const cols = $("steps").checked ? subs(tree).filter(x => x !== tree) : [];
+  // 表格
+  let h = `<tr><th></th>${vs.map(v => `<th>${v}</th>`).join("")}${cols.map(c => `<th>${show(c)}</th>`).join("")}<th class="main">${show(tree)}</th></tr>`;
+  const subCols = cols.map(c => column(c, vs));
+  for (let i = 0; i < rows; i++) {
+    h += `<tr><td class="idx">${i + 1}</td>${vs.map((v, j) => { const b = !((i >> j) & 1); return `<td class="${b ? "T" : "F"}">${T(b)}</td>`; }).join("")}`;
+    h += subCols.map(c => `<td class="${c[i] ? "T" : "F"}">${T(c[i])}</td>`).join("");
+    h += `<td class="main ${col[i] ? "T" : "F"}">${T(col[i])}</td></tr>`;
+  }
+  $("tbl").innerHTML = h;
+  // 判定
+  const k = col.filter(Boolean).length;
+  const kind = k === rows ? ["重言式", "b-t", "對所有真值可能性都為真：無條件為真，什麼也沒說（4.46、4.461）。"]
+    : k === 0 ? ["矛盾式", "b-c", "對所有真值可能性都為假：在任何條件下都不為真（4.46）。"]
+    : ["偶然命題", "b-o", "有些可能性下為真、有些下為假：它說了一些關於世界的事。"];
+  $("kind").innerHTML = `<span class="badge ${kind[1]}">${kind[0]}</span> <span class="note">${kind[2]}</span>`;
+  const total = Math.pow(2, rows);
+  let code = 0; col.forEach(v => code = code * 2 + (v ? 1 : 0));
+  const wf = wstr(col);
+  let info = `變項 <b class="mono">${vs.join(", ")}</b>（n＝${n}）・真值可能性 <b>${rows}</b> 種・可能的真值函數 <b>${total.toLocaleString()}</b> 種<br>`;
+  info += `原書記法（4.442）：<b class="mono">(${wf})(${vs.join(", ")})</b><br>`;
+  info += `編號：<b class="mono">${code}</b>（真值欄由上往下讀成二進位 <span class="mono">${col.map(v => v ? 1 : 0).join("")}</span>，範圍 0 – ${(total - 1).toLocaleString()}）`;
+  // 16 格：變項為 {p,q} 的子集時，以 (p,q) 計算；否則兩個變項時依序代入
+  let grid = null, gnote = "";
+  if (vs.every(v => v === "p" || v === "q")) { grid = wstr(column(tree, ["p", "q"])); }
+  else if (n === 2) { grid = wf; gnote = `（以 ${vs[0]}、${vs[1]} 代入 p、q 的位置）`; }
+  document.querySelectorAll(".cell").forEach(c => c.classList.toggle("hit", c.dataset.w === grid));
+  if (grid) { const idx = W101.findIndex(r => r[0] === grid); info += `<br>5.101 順序：<b>第 ${idx + 1} 號</b>　${W101[idx][2]}${gnote}`; }
+  $("gridNote").textContent = grid ? "點一格，把它的代表式子放進輸入框。圓點由左到右是 (p,q)＝(W,W)、(F,W)、(W,F)、(F,F)。" : `這個式子有 ${n} 個變項，屬於 ${total.toLocaleString()} 種之一，不在 p、q 的 16 格之內。`;
+  $("info").innerHTML = info;
+  // 邏輯空間條（4.463）
+  $("strip").innerHTML = col.map(v => `<i style="background:${v ? "var(--tru)" : "rgba(201,100,74,.35)"}"></i>`).join("");
+  $("stripNote").textContent = `邏輯空間條：${rows} 個點中容許 ${k} 個、排除 ${rows - k} 個。` + (k === rows ? "整個邏輯空間都留給現實（4.463）。" : k === 0 ? "一個點也不留給現實（4.463）。" : "排除得越多，說得越多。");
+}
+run();
+})();
+</script>
+</body>
+</html>

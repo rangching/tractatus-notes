@@ -1,0 +1,323 @@
+<!doctype html>
+<html lang="zh-Hant-TW">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>擺模型，對照真實</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@400;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#0E0F12;--panel:rgba(20,22,27,.92);--line:#2A2D35;--txt:#EDE6D6;--sub:#9C9688;--gold:#D4A84B;--blue:#6FA3D8;--true:#5FB8A6;--false:#C9644A;--p2:#5FB8A6}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{background:var(--bg);color:var(--txt);font-family:"Noto Serif TC","PingFang TC",serif;overflow-x:hidden;-webkit-tap-highlight-color:transparent}
+body{background-image:linear-gradient(rgba(237,230,214,.035) 1px,transparent 1px),linear-gradient(90deg,rgba(237,230,214,.035) 1px,transparent 1px);background-size:22px 22px}
+.mono{font-family:"JetBrains Mono",ui-monospace,Menlo,monospace}
+#app{display:grid;gap:8px;padding:8px;grid-template-columns:minmax(0,1.35fr) minmax(0,1fr);grid-template-rows:auto minmax(0,1fr) auto;grid-template-areas:"head head" "stage side" "ctrl ctrl";height:100vh}
+#app.portrait{height:auto;grid-template-columns:minmax(0,1fr);grid-template-rows:auto auto auto auto;grid-template-areas:"head" "stage" "ctrl" "side"}
+header{grid-area:head;display:flex;align-items:baseline;gap:10px;min-width:0;flex-wrap:wrap}
+header h1{font-size:15px;font-weight:700;color:var(--gold)}
+header span{font-size:12px;color:var(--sub)}
+.box{background:var(--panel);border:1px solid var(--line);border-radius:10px;position:relative;min-width:0;min-height:0}
+#stage{grid-area:stage;overflow:hidden}
+#app.portrait #stage{height:min(118vw,560px)}
+canvas{display:block;width:100%;height:100%;touch-action:none}
+#side{grid-area:side;display:flex;flex-direction:column;gap:8px;overflow-y:auto;padding:10px}
+#verdict{border-radius:8px;padding:8px 10px;border:1px solid var(--line);font-size:14px;line-height:1.5}
+#verdict b{font-size:18px}
+#verdict.t{border-color:var(--true);color:var(--true)}
+#verdict.f{border-color:var(--false);color:var(--false)}
+#verdict.u{border-color:var(--sub);color:var(--txt)}
+#verdict small{display:block;color:var(--sub);font-size:12px}
+table{width:100%;border-collapse:collapse;font-size:12.5px}
+th{color:var(--sub);font-weight:400;text-align:left;padding:3px 4px;border-bottom:1px solid var(--line)}
+td{padding:4px;border-bottom:1px dashed rgba(237,230,214,.08);vertical-align:top}
+td.v{white-space:nowrap;text-align:center;width:3.6em}
+td.ok{color:var(--true)}td.ng{color:var(--false)}td.q{color:var(--sub)}
+tr.bad td:first-child{color:var(--false)}
+.stat{font-size:12px;color:var(--sub);line-height:1.6}
+.stat b{color:var(--txt);font-weight:600}
+#ctrl{grid-area:ctrl;display:flex;flex-wrap:wrap;align-items:center;gap:6px 8px;padding:8px}
+button,select{background:#1A1C22;color:var(--txt);border:1px solid var(--line);border-radius:8px;padding:6px 11px;font:inherit;font-size:13px;cursor:pointer;min-height:34px}
+button:active{background:#262A31}
+button.on{border-color:var(--gold);color:var(--gold)}
+select{max-width:100%}
+.hint{font-size:11.5px;color:var(--sub);flex-basis:100%}
+</style>
+</head>
+<body>
+<div id="app">
+  <header><h1>擺模型，對照真實</h1><span>拖動模型車改位置，點一下轉方向；圖像的真假要拿去和現場比對才知道</span></header>
+  <div id="stage" class="box"><canvas id="cv" aria-label="左邊是法庭桌上的模型路口，右邊是事故現場；虛線是元素之間的對應"></canvas></div>
+  <div id="side" class="box">
+    <div id="verdict" class="u"></div>
+    <table><thead><tr><th>模型斷言的事態（依對應規則翻譯）</th><th>模型</th><th>現場</th></tr></thead><tbody id="tb"></tbody></table>
+    <div class="stat" id="stat"></div>
+  </div>
+  <div id="ctrl" class="box">
+    <select id="scn" aria-label="選擇現場">
+      <option value="0">現場一：路口擦撞</option>
+      <option value="1">現場二：同車道追撞</option>
+      <option value="2">現場三：三車事故</option>
+    </select>
+    <button id="bHide">遮住現場</button>
+    <button id="bMap">對應規則：同色相對</button>
+    <button id="bRot">↻ 轉向選取的車</button>
+    <button id="bReset">↺ 重擺模型</button>
+    <span class="hint">提示：模型只斷言「在哪個路段、朝哪個方向、誰的路徑和誰交會、誰的正前方會碰到誰」；同一路段裡往前或往後挪一格，意義不變。</span>
+  </div>
+</div>
+<script>
+(() => {
+"use strict";
+const $ = id => document.getElementById(id);
+const N = 8, DIRS = [[-1, 0], [0, 1], [1, 0], [0, -1]], DZH = "北東南西";
+const isRoad = (r, c) => r >= 0 && r < N && c >= 0 && c < N && (r === 3 || r === 4 || c === 3 || c === 4);
+const ROAD = []; for (let r = 0; r < N; r++) for (let c = 0; c < N; c++) if (isRoad(r, c)) ROAD.push([r, c]);
+const COL = { 紅: "#D9785B", 藍: "#7FA8D9", 黃: "#E2C25B" };
+const C = { txt: "#EDE6D6", sub: "#9C9688", gold: "#D4A84B", blue: "#6FA3D8", t: "#5FB8A6", f: "#C9644A", line: "#2A2D35" };
+
+// 三個現場（實在）：車名 → [列, 行, 方向]
+const SCENES = [
+  { real: { 紅: [5, 4, 0], 藍: [3, 6, 3] }, model: { 紅: [3, 1, 1], 藍: [6, 3, 0] } },
+  { real: { 紅: [5, 4, 0], 藍: [7, 4, 0] }, model: { 紅: [6, 4, 0], 藍: [4, 6, 3] } },
+  { real: { 紅: [4, 1, 1], 藍: [1, 3, 2], 黃: [3, 6, 3] }, model: { 紅: [1, 4, 2], 藍: [4, 6, 3], 黃: [6, 3, 0] } }
+];
+
+// ---------- 事態計算（與 _units/calc_u04.py 相同的規則） ----------
+function zone(r, c) {
+  if ((r === 3 || r === 4) && (c === 3 || c === 4)) return "中央";
+  if (c === 3 || c === 4) return r < 3 ? "北段" : "南段";
+  return c < 3 ? "西段" : "東段";
+}
+function path(r, c, d) {
+  const out = []; r += DIRS[d][0]; c += DIRS[d][1];
+  while (isRoad(r, c)) { out.push(r * N + c); r += DIRS[d][0]; c += DIRS[d][1]; }
+  return out;
+}
+// cars: {名: [r,c,d]}；rename: 模型車名 → 它所代表的現場車名
+function facts(cars, rename) {
+  const F = new Set(), P = {}, where = {}, ks = Object.keys(cars);
+  const nm = k => rename ? rename[k] : k;
+  for (const k of ks) {
+    const [r, c, d] = cars[k];
+    F.add(`在|${nm(k)}|${zone(r, c)}`); F.add(`朝|${nm(k)}|${DZH[d]}`);
+    P[k] = path(r, c, d); where[r * N + c] = k;
+  }
+  for (const a of ks) {
+    const hit = P[a].find(x => where[x] !== undefined);
+    if (hit !== undefined) F.add(`前方碰到|${nm(a)}|${nm(where[hit])}`);
+    for (const b of ks) {
+      if (a === b || cars[a][2] % 2 === cars[b][2] % 2) continue;
+      const sb = new Set(P[b]);
+      if (P[a].some(x => sb.has(x))) { const [x, y] = [nm(a), nm(b)].sort(); F.add(`路徑交會|${x}|${y}`); }
+    }
+  }
+  return F;
+}
+function factText(f) {
+  const [k, a, b] = f.split("|");
+  if (k === "在") return `${a}車在${b}`;
+  if (k === "朝") return `${a}車朝${b}`;
+  if (k === "前方碰到") return `${a}車正前方會碰到${b}車`;
+  return `${a}車與${b}車的行進路徑交會`;
+}
+const sameSet = (A, B) => A.size === B.size && [...A].every(x => B.has(x));
+
+// ---------- 狀態 ----------
+let sc = 0, model, hidden = false, swapped = false, sel = null, drag = null;
+function names() { return Object.keys(SCENES[sc].real); }
+function mapping() {
+  const ks = names(), m = {};
+  ks.forEach((k, i) => m[k] = swapped ? ks[(i + 1) % ks.length] : k); // 交換：每台模型車代表「下一台」真車
+  return m;
+}
+function resetModel() { model = JSON.parse(JSON.stringify(SCENES[sc].model)); sel = null; }
+
+// 真實列舉：可能擺法總數，以及其中與現場相符的擺法數
+function countTrue() {
+  const ks = names(), real = SCENES[sc].real, map = mapping(), target = facts(real);
+  const k = ks.length; let total = 1; for (let i = 0; i < k; i++) total *= (ROAD.length - i) * 4;
+  // 只有路段與方向都對的擺法才可能為真：先依現場篩出候選格，再逐一驗證全部事態
+  const cand = ks.map(m => { const [r, c, d] = real[map[m]]; return ROAD.filter(([rr, cc]) => zone(rr, cc) === zone(r, c)).map(([rr, cc]) => [rr, cc, d]); });
+  let ok = 0;
+  const rec = (i, cur, used) => {
+    if (i === k) { if (sameSet(facts(cur, map), target)) ok++; return; }
+    for (const p of cand[i]) { const id = p[0] * N + p[1]; if (used.has(id)) continue; used.add(id); cur[ks[i]] = p; rec(i + 1, cur, used); used.delete(id); }
+    delete cur[ks[i]];
+  };
+  rec(0, {}, new Set());
+  return { total, ok };
+}
+
+// ---------- 版面 ----------
+const app = $("app"), cv = $("cv"), ctx = cv.getContext("2d");
+let W = 0, H = 0, B = [];  // B[0] 模型棋盤、B[1] 現場棋盤：{x,y,s}
+function layout() {
+  app.classList.toggle("portrait", window.innerWidth < 640 || window.innerHeight > window.innerWidth * 1.05);
+  const r = cv.getBoundingClientRect(), dpr = Math.min(window.devicePixelRatio || 1, 2);
+  W = r.width; H = r.height; cv.width = Math.max(1, Math.round(W * dpr)); cv.height = Math.max(1, Math.round(H * dpr));
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  const pad = 12, top = 26;
+  const sSide = Math.min((W - pad * 3) / 2, H - top - pad) / N, sStack = Math.min(W - pad * 2, (H - top * 2 - pad) / 2) / N;
+  if (sSide >= sStack) { const s = sSide; const gx = (W - 2 * s * N) / 3, gy = Math.max(top, (H - s * N) / 2 + 8); B = [{ x: gx, y: gy, s }, { x: gx * 2 + s * N, y: gy, s }]; }
+  else { const s = Math.min(W - pad * 2, (H - top * 2 - pad) / 2) / N; const x = (W - s * N) / 2; B = [{ x, y: top, s }, { x, y: top * 2 + s * N, s }]; }
+  draw();
+}
+new ResizeObserver(layout).observe(document.body);
+
+// ---------- 繪圖 ----------
+function drawBoard(b, title) {
+  const { x, y, s } = b;
+  ctx.fillStyle = C.sub; ctx.font = "12px 'Noto Serif TC',serif"; ctx.textAlign = "left"; ctx.fillText(title, x, y - 8);
+  for (let r = 0; r < N; r++) for (let c = 0; c < N; c++) {
+    ctx.fillStyle = isRoad(r, c) ? "#2B2F37" : "#16181D";
+    ctx.fillRect(x + c * s + 0.5, y + r * s + 0.5, s - 1, s - 1);
+  }
+  ctx.strokeStyle = "rgba(237,230,214,.35)"; ctx.setLineDash([s * 0.18, s * 0.18]); ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(x, y + 4 * s); ctx.lineTo(x + 3 * s, y + 4 * s); ctx.moveTo(x + 5 * s, y + 4 * s); ctx.lineTo(x + N * s, y + 4 * s);
+  ctx.moveTo(x + 4 * s, y); ctx.lineTo(x + 4 * s, y + 3 * s); ctx.moveTo(x + 4 * s, y + 5 * s); ctx.lineTo(x + 4 * s, y + N * s); ctx.stroke(); ctx.setLineDash([]);
+  ctx.fillStyle = "rgba(156,150,136,.75)"; ctx.font = `${Math.max(9, s * 0.3)}px 'Noto Serif TC',serif`; ctx.textAlign = "center";
+  // 路段名稱標在各條路的末端（四條路在中央交會）
+  const tag = (t, cx, cy) => {
+    const tw = ctx.measureText(t).width + 6, th = Math.max(12, s * 0.4);
+    ctx.fillStyle = "rgba(14,15,18,.8)"; ctx.fillRect(cx - tw / 2, cy - th / 2, tw, th);
+    ctx.fillStyle = "rgba(237,230,214,.7)"; ctx.textBaseline = "middle"; ctx.fillText(t, cx, cy); ctx.textBaseline = "alphabetic";
+  };
+  tag("北段", x + 4 * s, y + 0.5 * s); tag("南段", x + 4 * s, y + 7.5 * s);
+  tag("西段", x + 0.75 * s, y + 4 * s); tag("東段", x + 7.25 * s, y + 4 * s);
+}
+function carCenter(b, r, c) { return [b.x + (c + 0.5) * b.s, b.y + (r + 0.5) * b.s]; }
+function drawCar(px, py, s, d, name, isSel, alpha) {
+  ctx.save(); ctx.translate(px, py); ctx.rotate(d * Math.PI / 2); ctx.globalAlpha = alpha;
+  const w = s * 0.56, h = s * 0.8;
+  ctx.fillStyle = COL[name]; ctx.beginPath(); ctx.roundRect(-w / 2, -h / 2, w, h, s * 0.12); ctx.fill();
+  ctx.fillStyle = "rgba(14,15,18,.75)"; ctx.beginPath(); ctx.moveTo(0, -h / 2 - s * 0.02); ctx.lineTo(w * 0.32, -h / 2 + s * 0.2); ctx.lineTo(-w * 0.32, -h / 2 + s * 0.2); ctx.closePath(); ctx.fill();
+  if (isSel) { ctx.strokeStyle = C.gold; ctx.lineWidth = 2; ctx.beginPath(); ctx.roundRect(-w / 2 - 3, -h / 2 - 3, w + 6, h + 6, s * 0.15); ctx.stroke(); }
+  ctx.restore();
+  ctx.globalAlpha = alpha; ctx.fillStyle = "#0E0F12"; ctx.font = `700 ${Math.max(9, s * 0.3)}px 'Noto Serif TC',serif`; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+  ctx.fillText(name, px, py + (d % 2 ? 0 : s * 0.06)); ctx.textBaseline = "alphabetic"; ctx.globalAlpha = 1;
+}
+function drawPaths(b, cars, alpha) {
+  for (const k in cars) {
+    const [r, c, d] = cars[k], p = path(r, c, d); if (!p.length) continue;
+    const [x0, y0] = carCenter(b, r, c), last = p[p.length - 1], [x1, y1] = carCenter(b, Math.floor(last / N), last % N);
+    ctx.strokeStyle = COL[k]; ctx.globalAlpha = alpha; ctx.lineWidth = 1.5; ctx.setLineDash([3, 4]);
+    ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(x1, y1); ctx.stroke(); ctx.setLineDash([]); ctx.globalAlpha = 1;
+  }
+}
+function draw() {
+  if (!W || !B.length) return;
+  ctx.clearRect(0, 0, W, H);
+  const real = SCENES[sc].real, map = mapping();
+  drawBoard(B[0], "模型（法庭桌上的玩具車）"); drawBoard(B[1], "現場（實在）");
+  drawPaths(B[0], model, 0.45);
+  for (const k in model) {
+    if (drag && drag.k === k && drag.moved) continue;
+    const [r, c, d] = model[k], [px, py] = carCenter(B[0], r, c); drawCar(px, py, B[0].s, d, k, sel === k, 1);
+  }
+  if (hidden) {
+    const { x, y, s } = B[1]; ctx.fillStyle = "rgba(22,24,29,.97)"; ctx.fillRect(x, y, s * N, s * N);
+    ctx.strokeStyle = C.line; ctx.strokeRect(x, y, s * N, s * N);
+    ctx.fillStyle = C.sub; ctx.font = `${Math.max(12, s * 0.45)}px 'Noto Serif TC',serif`; ctx.textAlign = "center";
+    ctx.fillText("法官沒看過現場", x + s * N / 2, y + s * N / 2 - s * 0.3);
+    ctx.font = `${Math.max(10, s * 0.32)}px 'Noto Serif TC',serif`; ctx.fillText("單看模型，看不出真假（2.224）", x + s * N / 2, y + s * N / 2 + s * 0.4);
+  } else {
+    drawPaths(B[1], real, 0.45);
+    for (const k in real) { const [r, c, d] = real[k], [px, py] = carCenter(B[1], r, c); drawCar(px, py, B[1].s, d, k, false, 1); }
+  }
+  // 元素對應：模型車 → 它所代表的真車（2.13、2.1514）
+  for (const k in model) {
+    const [r, c] = (drag && drag.k === k && drag.moved) ? [null, null] : model[k];
+    const a = r === null ? [drag.x, drag.y] : carCenter(B[0], r, c);
+    let bpt;
+    if (hidden) { const { x, y, s } = B[1]; bpt = [x + s * N / 2, y + s * N / 2]; }
+    else { const [rr, cc] = real[map[k]]; bpt = carCenter(B[1], rr, cc); }
+    ctx.strokeStyle = COL[k]; ctx.globalAlpha = hidden ? 0.25 : 0.7; ctx.lineWidth = 1.3; ctx.setLineDash([6, 5]);
+    ctx.beginPath(); ctx.moveTo(a[0], a[1]);
+    const mx = (a[0] + bpt[0]) / 2, my = (a[1] + bpt[1]) / 2 - 30;
+    ctx.quadraticCurveTo(mx, my, bpt[0], bpt[1]); ctx.stroke(); ctx.setLineDash([]); ctx.globalAlpha = 1;
+  }
+  if (drag && drag.moved) drawCar(drag.x, drag.y, B[0].s, model[drag.k][2], drag.k, true, 0.85);
+}
+
+// ---------- 比對與表格 ----------
+let cache = {};
+function update() {
+  const real = SCENES[sc].real, map = mapping();
+  const MF = facts(model, map), RF = facts(real);
+  const all = [...new Set([...MF, ...RF])].sort((a, b) => {
+    const o = s => ["在", "朝", "路徑交會", "前方碰到"].indexOf(s.split("|")[0]) * 10 + names().indexOf(s.split("|")[1]);
+    return o(a) - o(b);
+  });
+  let bad = 0;
+  $("tb").innerHTML = all.map(f => {
+    const m = MF.has(f), r = RF.has(f), ok = m === r; if (!ok) bad++;
+    const rv = hidden ? `<td class="v q">？</td>` : `<td class="v ${r ? "ok" : "ng"}">${r ? "成立" : "不成立"}</td>`;
+    return `<tr class="${!hidden && !ok ? "bad" : ""}"><td>${factText(f)}</td><td class="v ${m ? "ok" : "ng"}">${m ? "成立" : "不成立"}</td>${rv}</tr>`;
+  }).join("");
+  const v = $("verdict");
+  if (hidden) {
+    v.className = "u";
+    v.innerHTML = `<b>真假未定</b><small>模型呈現了一個可能的事況（2.202），但要拿它和現場比對才知道真假（2.223）。按「掀開現場」比對。</small>`;
+  } else if (bad === 0) {
+    v.className = "t"; v.innerHTML = `<b>✓ 圖像為真</b><small>模型斷言成立的事態，現場都成立；模型說不成立的，現場也不成立（2.21、2.222）。</small>`;
+  } else {
+    v.className = "f"; v.innerHTML = `<b>✗ 圖像為假</b><small>有 ${bad} 件事態對不上。假圖像仍然有意義：它清楚呈現了一個「可能、但沒有發生」的事況（2.22）。</small>`;
+  }
+  const key = sc + (swapped ? "s" : "i"); if (!cache[key]) cache[key] = countTrue();
+  const { total, ok } = cache[key];
+  const pairs = Object.keys(model).map(k => `模型${k}車 → 現場${map[k]}車`).join("、");
+  $("stat").innerHTML = `元素對應：${pairs}${swapped ? "（換了投影規則，同一個擺法說的是另一件事）" : ""}<br>
+    這個模型斷言成立的事態：<b class="mono">${MF.size}</b> 件；其餘可能的事態都被它斷言為不成立。<br>
+    ${names().length} 台車的模型一共有 <b class="mono">${total.toLocaleString()}</b> 種擺法（${ROAD.length} 個路格 × 4 個方向，實算），
+    其中與這個現場相符、呈現同一事況的有 <b class="mono">${ok}</b> 種：真的圖像不只一張，但每一張都必須和現場比對過才知道是真的。`;
+  draw();
+}
+
+// ---------- 互動：拖動與點擊 ----------
+function cellAt(x, y) {
+  const b = B[0]; const c = Math.floor((x - b.x) / b.s), r = Math.floor((y - b.y) / b.s);
+  return (r >= 0 && r < N && c >= 0 && c < N) ? [r, c] : null;
+}
+function carAt(r, c) { return Object.keys(model).find(k => model[k][0] === r && model[k][1] === c); }
+function pos(e) { const rc = cv.getBoundingClientRect(); return [e.clientX - rc.left, e.clientY - rc.top]; }
+cv.addEventListener("pointerdown", e => {
+  const [x, y] = pos(e), cell = cellAt(x, y); if (!cell) return;
+  const k = carAt(cell[0], cell[1]); if (!k) return;
+  drag = { k, x, y, x0: x, y0: y, moved: false }; cv.setPointerCapture(e.pointerId); e.preventDefault();
+});
+cv.addEventListener("pointermove", e => {
+  if (!drag) return; const [x, y] = pos(e);
+  drag.x = x; drag.y = y; if (Math.hypot(x - drag.x0, y - drag.y0) > 6) drag.moved = true;
+  if (drag.moved) draw();
+});
+function endDrag(e) {
+  if (!drag) return; const d = drag; drag = null;
+  if (!d.moved) { sel = d.k; model[d.k][2] = (model[d.k][2] + 1) % 4; update(); return; }
+  sel = d.k;
+  const b = B[0];
+  // 找最近的空道路格
+  let best = null, bd = Infinity;
+  for (const [r, c] of ROAD) {
+    const occ = carAt(r, c); if (occ && occ !== d.k) continue;
+    const [px, py] = carCenter(b, r, c), dd = Math.hypot(px - d.x, py - d.y);
+    if (dd < bd) { bd = dd; best = [r, c]; }
+  }
+  if (best && bd < b.s * 2.2) { model[d.k][0] = best[0]; model[d.k][1] = best[1]; }
+  update();
+}
+cv.addEventListener("pointerup", endDrag); cv.addEventListener("pointercancel", endDrag);
+
+// ---------- 控制 ----------
+$("scn").onchange = e => { sc = +e.target.value; swapped = false; $("bMap").textContent = "對應規則：同色相對"; $("bMap").classList.remove("on"); resetModel(); update(); };
+$("bHide").onclick = () => { hidden = !hidden; $("bHide").textContent = hidden ? "掀開現場，比對" : "遮住現場"; $("bHide").classList.toggle("on", hidden); update(); };
+$("bMap").onclick = () => { swapped = !swapped; $("bMap").textContent = swapped ? "對應規則：輪流交換" : "對應規則：同色相對"; $("bMap").classList.toggle("on", swapped); update(); };
+$("bRot").onclick = () => { if (!sel) sel = Object.keys(model)[0]; model[sel][2] = (model[sel][2] + 1) % 4; update(); };
+$("bReset").onclick = () => { resetModel(); update(); };
+
+resetModel(); layout(); update();
+})();
+</script>
+</body>
+</html>

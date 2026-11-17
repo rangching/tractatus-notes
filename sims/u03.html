@@ -1,0 +1,285 @@
+<!doctype html>
+<html lang="zh-Hant-TW">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>邏輯空間探索器</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@400;600&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#0E0F12;--panel:rgba(20,22,27,.92);--line:#2A2D35;--txt:#EDE6D6;--sub:#9A9384;--gold:#D4A84B;--blue:#6FA3D8;--teal:#5FB8A6;--rust:#C9644A;--vio:#8E86D6}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;overflow:hidden;color:var(--txt);font-family:"Noto Serif TC","PingFang TC",serif;-webkit-tap-highlight-color:transparent;
+  background-color:var(--bg);
+  background-image:linear-gradient(rgba(237,230,214,.035) 1px,transparent 1px),linear-gradient(90deg,rgba(237,230,214,.035) 1px,transparent 1px);
+  background-size:24px 24px}
+.mono{font-family:"JetBrains Mono",ui-monospace,Menlo,monospace}
+#app{position:absolute;inset:0;display:grid;gap:8px;padding:8px;grid-template-columns:minmax(0,1.4fr) minmax(0,1fr);grid-template-rows:auto minmax(0,1fr) auto;grid-template-areas:"head head" "stage side" "ctrl ctrl"}
+#app.portrait{grid-template-columns:minmax(0,1fr);grid-template-rows:auto minmax(0,1.25fr) minmax(0,1fr) auto;grid-template-areas:"head" "stage" "side" "ctrl"}
+header{grid-area:head;display:flex;align-items:baseline;gap:10px;min-width:0}
+header h1{font-size:15px;font-weight:600;white-space:nowrap}
+header span{font-size:12px;color:var(--sub);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.box{background:var(--panel);border:1px solid var(--line);border-radius:10px;position:relative;min-height:0;min-width:0;overflow:hidden}
+#stage{grid-area:stage}
+canvas{display:block;width:100%;height:100%;touch-action:none}
+#side{grid-area:side;display:flex;flex-direction:column;overflow-y:auto}
+.sec{padding:8px 10px;border-bottom:1px solid var(--line)}
+.sec h3{font-size:12px;font-weight:400;color:var(--sub);margin-bottom:6px}
+#sw{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px}
+.sa{display:flex;align-items:center;gap:8px;border:1px solid var(--line);border-radius:8px;padding:5px 8px;cursor:pointer;font-size:13px;min-height:36px;user-select:none}
+.sa input{width:18px;height:18px;accent-color:var(--teal)}
+.sa.on{border-color:var(--teal);background:rgba(95,184,166,.1)}
+.sa .st{margin-left:auto;font-size:11px;font-family:"JetBrains Mono",monospace}
+.sa.on .st{color:var(--teal)}.sa:not(.on) .st{color:var(--rust)}
+#read{display:grid;grid-template-columns:repeat(4,1fr);gap:4px;font-size:11px;color:var(--sub)}
+#read div{display:flex;flex-direction:column;min-width:0}
+#read b{font-family:"JetBrains Mono",monospace;font-size:16px;color:var(--txt);font-weight:600}
+#dist{display:flex;gap:4px;align-items:flex-end;height:74px}
+#dist .bar{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;height:100%;font-size:10px;color:var(--sub);font-family:"JetBrains Mono",monospace}
+#dist .bar i{display:block;width:70%;border-radius:3px 3px 0 0;min-height:2px}
+#dist .bar b{color:var(--txt);font-size:11px}
+#msg{font-size:12px;line-height:1.6;color:var(--sub)}
+#msg b{color:var(--gold)}
+#ctrl{grid-area:ctrl;display:flex;flex-wrap:wrap;align-items:center;gap:6px 14px;padding:6px 10px}
+label{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--sub)}
+label.grow{flex:1 1 170px;min-width:130px}
+input[type=range]{flex:1;accent-color:var(--gold);height:28px;min-width:70px}
+output{font-family:"JetBrains Mono",monospace;color:var(--txt);min-width:14px}
+select,button{background:#1B1E24;color:var(--txt);border:1px solid var(--line);border-radius:8px;padding:5px 10px;font:inherit;font-size:13px;min-height:32px;cursor:pointer}
+button.on{border-color:var(--gold);color:var(--gold)}
+.cap{position:absolute;left:10px;top:8px;font-size:11px;color:var(--sub);pointer-events:none;line-height:1.6}
+.cap i{display:inline-block;width:9px;height:9px;border-radius:50%;margin:0 3px 0 7px;vertical-align:middle}
+.tag{position:absolute;right:8px;bottom:5px;font-size:10px;color:var(--sub);pointer-events:none}
+#app.portrait header span{display:none}
+#app.portrait #read b{font-size:13px}
+#app.portrait #ctrl{gap:4px 8px;padding:5px 8px}
+#app.portrait #ctrl select,#app.portrait #ctrl button{padding:4px 8px;font-size:12px}
+#app.portrait .sa{min-height:32px;padding:3px 8px}
+</style>
+</head>
+<body>
+<div id="app">
+  <header><h1>邏輯空間探索器</h1><span>n 個彼此獨立的事態 → 2ⁿ 個可能世界（2.04、2.061）</span></header>
+  <div id="stage" class="box"><canvas id="cv" aria-label="邏輯空間：每個頂點是一個可能世界，點選頂點切換，拖曳旋轉"></canvas>
+    <div class="cap">與目前世界相差<i style="background:#D4A84B"></i>0<i style="background:#5FB8A6"></i>1<i style="background:#6FA3D8"></i>2<i style="background:#8E86D6"></i>3<i style="background:#C9644A"></i>4 件事</div>
+    <span class="tag" id="tag">拖曳旋轉・點頂點跳過去</span></div>
+  <div id="side" class="box">
+    <div class="sec"><h3>勾選＝這個事態成立（只改一個，其他不變）</h3><div id="sw"></div></div>
+    <div class="sec"><div id="read">
+      <div><small>可能世界</small><b id="rV">—</b></div>
+      <div><small>邊（相鄰對）</small><b id="rE">—</b></div>
+      <div><small>相鄰世界</small><b id="rN">—</b></div>
+      <div><small>目前世界</small><b id="rW" style="color:var(--gold)">—</b></div>
+    </div></div>
+    <div class="sec"><h3>從目前世界出發，相差 k 件事的世界數（BFS）</h3><div id="dist"></div></div>
+    <div class="sec"><p id="msg"></p></div>
+  </div>
+  <div id="ctrl" class="box">
+    <label class="grow">事態數 n <input id="nS" type="range" min="1" max="4" step="1" value="3"><output id="oN">3</output></label>
+    <label>排列 <select id="view"><option value="cube">超立方體投影</option><option value="gray">Gray code 排列</option></select></label>
+    <button id="bTour">▶ 巡禮</button>
+    <button id="bSpin" class="on">自動旋轉</button>
+  </div>
+</div>
+<script>
+(() => {
+"use strict";
+const $ = id => document.getElementById(id);
+const DCOL = ["#D4A84B", "#5FB8A6", "#6FA3D8", "#8E86D6", "#C9644A"];
+const app = $("app"), cv = $("cv"), ctx = cv.getContext("2d");
+
+// ---------- 邏輯空間：頂點 = {0,1}^n，只差一位的頂點相連 ----------
+let n = 3, V = [], E = [], adj = [], world = 0b101 & 7, dist = [], view = "cube";
+const bits = v => Array.from({ length: n }, (_, i) => (v >> i) & 1);          // 第 i 位 = 事態 i+1
+const label = v => bits(v).join("");
+const popc = x => { let c = 0; while (x) { c += x & 1; x >>= 1; } return c; };
+let EXT = 1;   // 各種旋轉角下投影的最大半徑（取樣求得），用來固定縮放、避免旋轉時忽大忽小
+function measure() {
+  const keep = { ...rot }; EXT = 0.01;
+  for (let i = 0; i < 10; i++) for (let j = 0; j < 10; j++) for (let k = 0; k < (n === 4 ? 10 : 1); k++) {
+    rot.a = i * 0.63; rot.b = j * 0.63; rot.w = k * 0.63;
+    for (const v of V) { const [x, y] = project(v); EXT = Math.max(EXT, Math.abs(x), Math.abs(y)); }
+  }
+  rot = keep;
+}
+function build() {
+  V = Array.from({ length: 1 << n }, (_, v) => v);
+  E = []; adj = V.map(() => []);
+  for (const u of V) for (const v of V) if (u < v && popc(u ^ v) === 1) { E.push([u, v]); adj[u].push(v); adj[v].push(u); }
+  measure();
+}
+function bfs() {                                     // 以實際的圖做廣度優先搜尋
+  dist = V.map(() => -1); dist[world] = 0; const q = [world];
+  while (q.length) { const u = q.shift(); for (const w of adj[u]) if (dist[w] < 0) { dist[w] = dist[u] + 1; q.push(w); } }
+}
+const gray = i => i ^ (i >> 1);
+
+// ---------- 投影：n 維 → 2D ----------
+let rot = { a: 0.6, b: -0.45, w: 0.5 }, spin = true;
+function project(v) {
+  const c = bits(v).map(b => b ? 1 : -1);
+  while (c.length < 4) c.push(0);
+  let [x, y, z, w] = c;
+  if (n === 1) return [x * 1.1, 0, 1];
+  if (n === 2) { return [x * 0.95, -y * 0.95, 1]; }
+  // 4D：x–w 平面旋轉，再以 w 做透視
+  if (n === 4) {
+    const cw = Math.cos(rot.w), sw = Math.sin(rot.w);
+    [x, w] = [x * cw - w * sw, x * sw + w * cw];
+    const k = 3 / (3.6 - w); x *= k; y *= k; z *= k;
+  }
+  // 3D：繞 y（a）再繞 x（b）
+  const ca = Math.cos(rot.a), sa = Math.sin(rot.a), cb = Math.cos(rot.b), sb = Math.sin(rot.b);
+  [x, z] = [x * ca + z * sa, -x * sa + z * ca];
+  [y, z] = [y * cb - z * sb, y * sb + z * cb];
+  const p = 6 / (6 + z);
+  return [x * p, -y * p, p];
+}
+// Gray code 排列（卡諾圖式）：列用前半位、欄用後半位的 Gray code，相鄰格只差一個事態
+function grayPos(v) {
+  const rb = Math.floor(n / 2), cb = n - rb, R = 1 << rb, Cc = 1 << cb;
+  const b = bits(v);
+  const colV = b.slice(0, cb).reduce((s, x, i) => s | (x << i), 0), rowV = b.slice(cb).reduce((s, x, i) => s | (x << i), 0);
+  const ci = [...Array(Cc).keys()].findIndex(i => gray(i) === colV), ri = [...Array(R).keys()].findIndex(i => gray(i) === rowV);
+  return { ci, ri, R, Cc };
+}
+
+// ---------- 版面與繪圖 ----------
+let W = 0, H = 0, P = [];
+function fit() {
+  app.classList.toggle("portrait", innerHeight > innerWidth * 1.05);
+  const r = cv.getBoundingClientRect(), dpr = Math.min(devicePixelRatio || 1, 2);
+  W = r.width; H = r.height; cv.width = Math.max(1, W * dpr | 0); cv.height = Math.max(1, H * dpr | 0);
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0); draw();
+}
+function positions() {
+  const top = 24, S = Math.min(W - 70, H - top - 30) * 0.5 / EXT, cx = W / 2, cy = top + (H - top) / 2;
+  if (view === "gray") {
+    const { R, Cc } = grayPos(0), cell = Math.min((W - 40) / Cc, (H - top - 40) / R);
+    return V.map(v => { const g = grayPos(v); return [cx + (g.ci - (Cc - 1) / 2) * cell, cy + (g.ri - (R - 1) / 2) * cell, 1, cell]; });
+  }
+  return V.map(v => { const [x, y, p] = project(v); return [cx + x * S, cy + y * S, p, 0]; });
+}
+function draw() {
+  if (!W) return;
+  ctx.clearRect(0, 0, W, H);
+  P = positions();
+  const nb = new Set(adj[world]);
+  if (view === "gray") {
+    const cell = P[0][3];
+    // 格子
+    for (const v of V) {
+      const [x, y] = P[v], d = dist[v];
+      ctx.fillStyle = v === world ? "rgba(212,168,75,.22)" : d === 1 ? "rgba(95,184,166,.14)" : "rgba(237,230,214,.03)";
+      ctx.strokeStyle = v === world ? DCOL[0] : d === 1 ? DCOL[1] : "#2A2D35"; ctx.lineWidth = v === world || d === 1 ? 2 : 1;
+      ctx.beginPath(); ctx.roundRect(x - cell / 2 + 3, y - cell / 2 + 3, cell - 6, cell - 6, 8); ctx.fill(); ctx.stroke();
+    }
+    // Gray code 走法
+    ctx.strokeStyle = "rgba(237,230,214,.25)"; ctx.lineWidth = 1.5; ctx.setLineDash([4, 5]); ctx.beginPath();
+    for (let i = 0; i < V.length; i++) { const [x, y] = P[gray(i)]; i ? ctx.lineTo(x, y) : ctx.moveTo(x, y); }
+    ctx.stroke(); ctx.setLineDash([]);
+    for (const v of V) {
+      const [x, y] = P[v], d = dist[v];
+      ctx.fillStyle = DCOL[d]; ctx.font = `600 ${Math.max(11, Math.min(18, cell * 0.2))}px 'JetBrains Mono',monospace`;
+      ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillText(label(v), x, y - cell * 0.08);
+      ctx.font = `${Math.max(9, Math.min(12, cell * 0.13))}px 'JetBrains Mono',monospace`; ctx.fillStyle = "#9A9384";
+      ctx.fillText(v === world ? "目前" : "差 " + d, x, y + cell * 0.2);
+    }
+    return;
+  }
+  // 超立方體：邊（遠的先畫）
+  const order = E.slice().sort((e1, e2) => (P[e1[0]][2] + P[e1[1]][2]) - (P[e2[0]][2] + P[e2[1]][2]));
+  for (const [u, v] of order) {
+    const hot = (u === world && nb.has(v)) || (v === world && nb.has(u));
+    const axis = Math.log2(u ^ v);
+    ctx.strokeStyle = hot ? DCOL[1] : ["#C9B98F", "#6FA3D8", "#8E86D6", "#B98AC2"][axis];
+    ctx.globalAlpha = hot ? 1 : 0.32; ctx.lineWidth = hot ? 3 : 1.3;
+    ctx.beginPath(); ctx.moveTo(P[u][0], P[u][1]); ctx.lineTo(P[v][0], P[v][1]); ctx.stroke();
+  }
+  ctx.globalAlpha = 1;
+  const vs = V.slice().sort((a, b) => P[a][2] - P[b][2]);
+  const allLab = n <= 3 || W > 420;
+  for (const v of vs) {
+    const [x, y, p] = P[v], d = dist[v], r = (v === world ? 11 : d === 1 ? 8 : 6) * Math.min(1.25, p);
+    ctx.fillStyle = DCOL[d]; ctx.globalAlpha = d <= 1 ? 1 : 0.85;
+    ctx.beginPath(); ctx.arc(x, y, r, 0, 7); ctx.fill();
+    if (v === world) { ctx.strokeStyle = "#EDE6D6"; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(x, y, r + 5, 0, 7); ctx.stroke(); }
+    if (allLab || d <= 1) {
+      ctx.globalAlpha = 1; ctx.fillStyle = v === world ? "#D4A84B" : "#EDE6D6";
+      ctx.font = `${v === world ? 600 : 400} 11px 'JetBrains Mono',monospace`; ctx.textAlign = "left"; ctx.textBaseline = "middle";
+      ctx.fillText(label(v), x + r + 4, y - r - 2);
+    }
+  }
+  ctx.globalAlpha = 1;
+}
+
+// ---------- 面板 ----------
+function renderSwitches() {
+  $("sw").innerHTML = Array.from({ length: n }, (_, i) => {
+    const on = (world >> i) & 1;
+    return `<label class="sa ${on ? "on" : ""}"><input type="checkbox" data-i="${i}" ${on ? "checked" : ""}>事態 ${i + 1}<span class="st">${on ? "成立" : "不成立"}</span></label>`;
+  }).join("");
+}
+function panel() {
+  $("rV").textContent = V.length; $("rE").textContent = E.length; $("rN").textContent = adj[world].length; $("rW").textContent = label(world);
+  const cnt = Array(n + 1).fill(0); dist.forEach(d => cnt[d]++);
+  const mx = Math.max(...cnt);
+  $("dist").innerHTML = cnt.map((c, k) => `<div class="bar"><b>${c}</b><i style="height:${(c / mx * 44) | 0}px;background:${DCOL[k]}"></i>差 ${k}</div>`).join("");
+  const on = bits(world).map((b, i) => b ? i + 1 : 0).filter(Boolean);
+  $("msg").innerHTML = `目前的世界 <b>${label(world)}</b>：${on.length ? "事態 " + on.join("、") + " 成立" : "沒有任何事態成立"}`
+    + `${on.length < n ? "，其餘不成立" : ""}。成立的事態的總和就是世界（2.04），它也同時決定了哪些事態不成立（2.05）。`
+    + `頂點 ${V.length} 個、邊 ${E.length} 條，公式 n·2ⁿ⁻¹ = ${n * (1 << (n - 1))}。`;
+}
+function setWorld(v) { world = v; bfs(); renderSwitches(); panel(); draw(); }
+function setN(k) { n = k; $("oN").textContent = n; world = world & ((1 << n) - 1); build(); setWorld(world); $("tag").textContent = view === "gray" ? "相鄰格＝只差一件事（含左右、上下繞回）" : (n >= 3 ? "拖曳旋轉・點頂點跳過去" : "點頂點跳過去"); }
+
+// ---------- 互動 ----------
+$("sw").addEventListener("change", e => { const i = +e.target.dataset.i; stopTour(); setWorld(world ^ (1 << i)); });
+let drag = null, moved = 0;
+cv.addEventListener("pointerdown", e => { cv.setPointerCapture(e.pointerId); drag = [e.clientX, e.clientY]; moved = 0; });
+cv.addEventListener("pointermove", e => {
+  if (!drag) return;
+  const dx = e.clientX - drag[0], dy = e.clientY - drag[1]; drag = [e.clientX, e.clientY]; moved += Math.abs(dx) + Math.abs(dy);
+  if (view === "cube" && n >= 3) { rot.a += dx * 0.01; rot.b += dy * 0.01; draw(); }
+});
+const up = e => {
+  if (drag && moved < 6) {
+    const r = cv.getBoundingClientRect(), x = e.clientX - r.left, y = e.clientY - r.top;
+    let best = -1, bd = view === "gray" ? Infinity : 24 * 24;
+    V.forEach(v => { const d = (P[v][0] - x) ** 2 + (P[v][1] - y) ** 2; if (d < bd) { bd = d; best = v; } });
+    if (view === "gray" && best >= 0 && Math.sqrt(bd) > P[0][3] * 0.6) best = -1;
+    if (best >= 0) { stopTour(); setWorld(best); }
+  }
+  drag = null;
+};
+cv.addEventListener("pointerup", up); cv.addEventListener("pointercancel", () => drag = null);
+$("nS").oninput = e => { stopTour(); setN(+e.target.value); };
+$("view").onchange = e => { view = e.target.value; setN(n); };
+$("bSpin").onclick = () => { spin = !spin; $("bSpin").classList.toggle("on", spin); };
+
+// Gray code 巡禮：一次只改一個事態，走遍全部 2^n 個世界
+let tour = null;
+function stopTour() { if (tour) { clearInterval(tour); tour = null; $("bTour").textContent = "▶ 巡禮"; $("bTour").classList.remove("on"); } }
+$("bTour").onclick = () => {
+  if (tour) return stopTour();
+  let i = 0; setWorld(gray(0));
+  $("bTour").textContent = "❚❚ 停止"; $("bTour").classList.add("on");
+  tour = setInterval(() => { i++; if (i >= V.length) return stopTour(); setWorld(gray(i)); }, 750);
+};
+
+let last = 0;
+function frame(t) {
+  const dt = Math.min(0.05, (t - last) / 1000 || 0); last = t;
+  if (spin && view === "cube" && n >= 3 && !drag) { rot.a += dt * 0.25; if (n === 4) rot.w += dt * 0.35; draw(); }
+  requestAnimationFrame(frame);
+}
+document.addEventListener("visibilitychange", () => { if (document.hidden) stopTour(); });
+
+build(); setN(3);
+new ResizeObserver(fit).observe(document.body);
+requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>

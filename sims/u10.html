@@ -1,0 +1,336 @@
+<!doctype html>
+<html lang="zh-Hant-TW">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>視野模型</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@400;600&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#0E0F12;--panel:#15171C;--line:#2A2D35;--txt:#EDE6D6;--sub:#9A9384;--gold:#D4A84B;--blue:#6FA3D8;--teal:#5FB8A6;--rust:#C9644A;--m5:#8E86D6}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;background:var(--bg);color:var(--txt);font-family:"Noto Serif TC","PingFang TC",serif;overflow:hidden;-webkit-tap-highlight-color:transparent}
+body{background-image:linear-gradient(rgba(237,230,214,.035) 1px,transparent 1px),linear-gradient(90deg,rgba(237,230,214,.035) 1px,transparent 1px);background-size:22px 22px}
+.num{font-family:"JetBrains Mono",ui-monospace,Menlo,monospace}
+#app{position:absolute;inset:0;display:grid;gap:8px;padding:8px;grid-template-columns:1fr 1.15fr;grid-template-rows:auto minmax(0,1fr) auto auto;grid-template-areas:"head head" "map view" "map read" "ctrl ctrl"}
+#app.portrait{grid-template-columns:1fr;grid-template-rows:auto minmax(0,1fr) minmax(0,.62fr) auto auto;grid-template-areas:"head" "map" "view" "read" "ctrl"}
+header{grid-area:head;display:flex;align-items:baseline;gap:10px;min-width:0}
+header h1{font-size:15px;font-weight:600;white-space:nowrap}
+header span{font-size:12px;color:var(--sub);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.box{background:rgba(21,23,28,.92);border:1px solid var(--line);border-radius:10px;position:relative;min-height:0;min-width:0;overflow:hidden}
+#mapBox{grid-area:map}#viewBox{grid-area:view}
+canvas{display:block;width:100%;height:100%;touch-action:none}
+.tag{position:absolute;right:10px;bottom:6px;font-size:10px;color:var(--sub);pointer-events:none}
+.cap{position:absolute;left:10px;top:7px;font-size:11px;color:var(--sub);pointer-events:none;line-height:1.5}
+#read{grid-area:read;display:grid;grid-template-columns:repeat(3,1fr);gap:6px 10px;padding:8px 10px;font-size:12px}
+#read div{display:flex;flex-direction:column;gap:2px;min-width:0}
+#read b{font-size:15px;font-weight:600}
+#read small{color:var(--sub)}
+#read .wide{grid-column:1/-1}
+#read .wide b{font-size:13px;font-weight:400;line-height:1.55}
+#ctrl{grid-area:ctrl;display:flex;flex-wrap:wrap;align-items:center;gap:8px 14px;padding:8px 10px}
+button{background:#1C1F26;color:var(--txt);border:1px solid var(--line);border-radius:8px;padding:6px 12px;font:inherit;font-size:13px;cursor:pointer;min-height:34px}
+button:active{background:#262A33}
+button.on{border-color:var(--gold);color:var(--gold)}
+label{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--sub);flex:1 1 200px;min-width:170px}
+label output{color:var(--txt);min-width:46px;text-align:right}
+input[type=range]{flex:1;accent-color:var(--gold);height:28px;min-width:80px}
+#app.portrait #read{grid-template-columns:repeat(3,1fr);padding:6px 8px}
+#app.portrait #read b{font-size:13px}
+#app.portrait #read .wide b{font-size:12px}
+#app.portrait button{min-height:30px;padding:4px 9px;font-size:12px}
+#app.portrait label{flex-basis:100%}
+</style>
+</head>
+<body>
+<div id="app">
+  <header><h1>視野模型</h1><span>5.633：眼睛你其實是看不見的</span></header>
+  <div id="mapBox" class="box"><canvas id="map"></canvas>
+    <div class="cap">俯視圖：拖動畫面轉動視線<br><span style="color:var(--blue)">■</span> 視野錐　<span style="color:var(--gold)">◆</span> 眼睛（錐的頂點）</div>
+    <span class="tag">光線投射・真實計算</span></div>
+  <div id="viewBox" class="box"><canvas id="view"></canvas>
+    <div class="cap" id="viewCap">從眼睛看出去：點一下畫面，看那一點是什麼</div></div>
+  <div id="read" class="box">
+    <div><small>視線方向／視角</small><b class="num" id="rDir">—</b></div>
+    <div><small id="rVisH">看見的物件</small><b class="num" id="rVis">—</b></div>
+    <div><small>視野中「看的那一方」</small><b class="num" id="rSub" style="color:var(--rust)">0 次</b></div>
+    <div class="wide"><small id="rPickH">你點的那一點</small><b id="rPick">點右邊（或下方）的視野畫面試試看。最左、最右那一欄也點點看。</b></div>
+  </div>
+  <div id="ctrl" class="box">
+    <label>視線方向 <input id="sDir" type="range" min="-180" max="180" step="1" value="60"><output class="num" id="oDir">60°</output></label>
+    <label>視角 <input id="sFov" type="range" min="20" max="180" step="2" value="90"><output class="num" id="oFov">90°</output></label>
+    <button id="bMirror">放一面鏡子</button>
+    <button id="bLook">看向鏡子</button>
+    <button id="bFig">5.6331 的那張圖</button>
+  </div>
+</div>
+<script>
+(() => {
+"use strict";
+// ================= CORE（與 _units/calc_u10.py 逐行對應，勿只改一邊） =================
+function mulberry32(a) {
+  return function () {
+    a |= 0; a = a + 0x6D2B79F5 | 0;
+    let t = Math.imul(a ^ a >>> 15, 1 | a);
+    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  };
+}
+const HALF = 10, EYE_R = 0.3, MA = [3.5, -7.5], MB = [8, -3], MF = [5.5, -5.5], EPS = 1e-9;
+function segDist(px, py, ax, ay, bx, by) {
+  const ex = bx - ax, ey = by - ay;
+  let u = ((px - ax) * ex + (py - ay) * ey) / (ex * ex + ey * ey);
+  u = Math.max(0, Math.min(1, u));
+  const dx = px - (ax + u * ex), dy = py - (ay + u * ey);
+  return Math.sqrt(dx * dx + dy * dy);
+}
+function makeWorld(seed = 5633, n = 16) {
+  const rnd = mulberry32(seed), objs = []; let tries = 0;
+  while (objs.length < n && tries < 5000) {
+    tries++;
+    const x = -9 + 18 * rnd(), y = -9 + 18 * rnd(), r = 0.35 + 0.5 * rnd(), k = Math.floor(rnd() * 3);
+    if (Math.sqrt(x * x + y * y) < 2.2) continue;
+    if (objs.some(o => Math.sqrt((x - o[0]) ** 2 + (y - o[1]) ** 2) < r + o[2] + 0.4)) continue;
+    if (segDist(x, y, MA[0], MA[1], MB[0], MB[1]) < r + 0.4) continue;
+    if (segDist(x, y, 0, 0, MF[0], MF[1]) < r + 1.0) continue;
+    objs.push([x, y, r, k]);
+  }
+  return objs;
+}
+function hitCircle(ox, oy, dx, dy, cx, cy, r) {
+  const px = ox - cx, py = oy - cy, b = px * dx + py * dy, c = px * px + py * py - r * r, disc = b * b - c;
+  if (disc < 0) return null;
+  const s = Math.sqrt(disc); let t = -b - s;
+  if (t > EPS) return t;
+  t = -b + s; return t > EPS ? t : null;
+}
+function hitMirror(ox, oy, dx, dy) {
+  const ex = MB[0] - MA[0], ey = MB[1] - MA[1], den = dx * ey - dy * ex;
+  if (Math.abs(den) < 1e-12) return null;
+  const wx = MA[0] - ox, wy = MA[1] - oy, t = (wx * ey - wy * ex) / den, u = (wx * dy - wy * dx) / den;
+  return (t > EPS && u >= 0 && u <= 1) ? t : null;
+}
+function hitWall(ox, oy, dx, dy) {
+  const tx = dx > 0 ? (HALF - ox) / dx : dx < 0 ? (-HALF - ox) / dx : Infinity;
+  const ty = dy > 0 ? (HALF - oy) / dy : dy < 0 ? (-HALF - oy) / dy : Infinity;
+  return Math.min(tx, ty);
+}
+// 回傳 {k:種類 obj/wall/eye, i:編號, t:總距離, m:是否經過鏡子, seg:[線段...]}
+function cast(objs, ox, oy, dx, dy, mirrorOn, bounced = false) {
+  let bestT = hitWall(ox, oy, dx, dy), bk = "wall", bi = -1;
+  for (let i = 0; i < objs.length; i++) {
+    const o = objs[i], t = hitCircle(ox, oy, dx, dy, o[0], o[1], o[2]);
+    if (t !== null && t < bestT) { bestT = t; bk = "obj"; bi = i; }
+  }
+  if (bounced) {
+    const t = hitCircle(ox, oy, dx, dy, 0, 0, EYE_R);
+    if (t !== null && t < bestT) { bestT = t; bk = "eye"; bi = -1; }
+  }
+  if (mirrorOn && !bounced) {
+    const t = hitMirror(ox, oy, dx, dy);
+    if (t !== null && t < bestT) {
+      const px = ox + t * dx, py = oy + t * dy, ex = MB[0] - MA[0], ey = MB[1] - MA[1];
+      const L = Math.sqrt(ex * ex + ey * ey), nx = -ey / L, ny = ex / L, dn = dx * nx + dy * ny;
+      const rx = dx - 2 * dn * nx, ry = dy - 2 * dn * ny;
+      const h = cast(objs, px, py, rx, ry, mirrorOn, true);
+      return { k: h.k, i: h.i, t: t + h.t, m: true, seg: [[ox, oy, px, py], [px, py, px + h.t * rx, py + h.t * ry]] };
+    }
+  }
+  return { k: bk, i: bi, t: bestT, m: false, seg: [[ox, oy, ox + bestT * dx, oy + bestT * dy]] };
+}
+function fan(objs, dirDeg, fovDeg, mirrorOn, step = 0.5) {
+  const K = Math.trunc(fovDeg / step), out = [];
+  for (let k = 0; k <= K; k++) {
+    const th = (dirDeg - fovDeg / 2 + k * step) * Math.PI / 180;
+    const h = cast(objs, 0, 0, Math.cos(th), Math.sin(th), mirrorOn);
+    h.a = dirDeg - fovDeg / 2 + k * step; h.rel = h.a - dirDeg; out.push(h);
+  }
+  return out;
+}
+// ================= /CORE =================
+if (typeof document === "undefined") { module.exports = { makeWorld, fan, cast }; return; }
+
+const $ = id => document.getElementById(id);
+const C = { gold: "#D4A84B", blue: "#6FA3D8", teal: "#5FB8A6", rust: "#C9644A", txt: "#EDE6D6", sub: "#9A9384", line: "#2A2D35", m1: "#C9B98F", mirror: "#B9C6D3" };
+const KIND = [{ n: "樹", c: "#5FB8A6" }, { n: "石頭", c: "#C9B98F" }, { n: "燈柱", c: "#D4A84B" }];
+const world = makeWorld();
+const label = i => KIND[world[i][3]].n + " #" + (i + 1);
+let dir = 60, fov = 90, mirrorOn = false, showFig = false, rays = [], pick = null;
+
+const map = $("map"), view = $("view"), mx = map.getContext("2d"), vx = view.getContext("2d"), app = $("app");
+let MW = 0, MH = 0, VW = 0, VH = 0;
+function fit(c) {
+  const r = c.getBoundingClientRect(), dpr = Math.min(window.devicePixelRatio || 1, 2);
+  c.width = Math.max(1, Math.round(r.width * dpr)); c.height = Math.max(1, Math.round(r.height * dpr));
+  c.getContext("2d").setTransform(dpr, 0, 0, dpr, 0, 0);
+  return [r.width, r.height];
+}
+function layout() {
+  app.classList.toggle("portrait", window.innerHeight > window.innerWidth * 1.05 || window.innerWidth < 640);
+  [MW, MH] = fit(map); [VW, VH] = fit(view); render();
+}
+new ResizeObserver(layout).observe(document.body);
+
+function compute() {
+  rays = fan(world, dir, fov, mirrorOn);
+  const seen = new Set(rays.filter(h => h.k === "obj").map(h => h.i));
+  const eyeCols = rays.filter(h => h.k === "eye").length;
+  $("rDir").textContent = Math.round(dir) + "°／" + fov + "°";
+  $("rVis").textContent = seen.size + " / " + world.length;
+  $("rVisH").textContent = eyeCols ? "看見的物件＋鏡中的眼睛" : "看見的物件";
+  // 「看的那一方」：所有光線的起點。它不是任何一條光線碰到的東西，所以永遠是 0。
+  const subj = rays.filter(h => h.t <= 0).length;
+  $("rSub").textContent = subj + " 次";
+}
+function describe(h) {
+  const where = (h.rel >= 0 ? "左" : "右") + Math.abs(h.rel).toFixed(1) + "°";
+  let what;
+  if (h.k === "obj") what = (h.m ? "鏡子裡的" : "") + label(h.i);
+  else if (h.k === "eye") what = "鏡子裡的眼睛：這是你的身體，世界中的一個物（5.631），不是那個在看的「我」";
+  else what = (h.m ? "鏡子裡的" : "") + "遠處的圍牆";
+  return `${what}（視線${h.rel === 0 ? "正中" : where}，光線走了 ${h.t.toFixed(2)}）`;
+}
+
+// ---------- 俯視圖 ----------
+let S = 1, OX = 0, OY = 0;
+const W2S = (x, y) => [OX + x * S, OY - y * S];
+function drawMap() {
+  if (!MW) return;
+  mx.clearRect(0, 0, MW, MH);
+  S = Math.min(MW, MH - 10) / (2 * HALF + 1.2); OX = MW / 2; OY = MH / 2 + 4;
+  // 庭院
+  const [ax, ay] = W2S(-HALF, HALF);
+  mx.strokeStyle = C.line; mx.lineWidth = 1.5; mx.strokeRect(ax, ay, 2 * HALF * S, 2 * HALF * S);
+  // 視野錐（填色）
+  const a0 = (dir - fov / 2) * Math.PI / 180, a1 = (dir + fov / 2) * Math.PI / 180;
+  mx.fillStyle = "rgba(111,163,216,.13)"; mx.beginPath(); mx.moveTo(OX, OY);
+  for (const h of rays) { const s = h.seg[0]; const [x, y] = W2S(s[2], s[3]); mx.lineTo(x, y); }
+  mx.closePath(); mx.fill();
+  // 光線（稀疏地畫）
+  const every = Math.max(1, Math.round(rays.length / 60));
+  rays.forEach((h, j) => {
+    if (j % every && !(pick && pick === h)) return;
+    h.seg.forEach((s, q) => {
+      const [x1, y1] = W2S(s[0], s[1]), [x2, y2] = W2S(s[2], s[3]);
+      mx.strokeStyle = h === pick ? C.gold : q ? "rgba(185,198,211,.35)" : "rgba(111,163,216,.28)";
+      mx.lineWidth = h === pick ? 2 : 1; mx.beginPath(); mx.moveTo(x1, y1); mx.lineTo(x2, y2); mx.stroke();
+    });
+  });
+  // 錐的兩條邊
+  mx.strokeStyle = "rgba(111,163,216,.75)"; mx.lineWidth = 1.4; mx.setLineDash([5, 4]);
+  for (const a of [a0, a1]) { const t = hitWall(0, 0, Math.cos(a), Math.sin(a)); const [x, y] = W2S(t * Math.cos(a), t * Math.sin(a)); mx.beginPath(); mx.moveTo(OX, OY); mx.lineTo(x, y); mx.stroke(); }
+  mx.setLineDash([]);
+  // 物件
+  const seen = new Set(rays.filter(h => h.k === "obj").map(h => h.i));
+  world.forEach((o, i) => {
+    const [x, y] = W2S(o[0], o[1]);
+    mx.globalAlpha = seen.has(i) ? 1 : .38;
+    mx.fillStyle = KIND[o[3]].c; mx.beginPath(); mx.arc(x, y, Math.max(3, o[2] * S), 0, 7); mx.fill();
+    mx.globalAlpha = 1;
+    if (S > 11) { mx.fillStyle = C.bg || "#0E0F12"; mx.font = "9px 'JetBrains Mono',monospace"; mx.textAlign = "center"; mx.fillText(String(i + 1), x, y + 3); }
+  });
+  // 鏡子
+  if (mirrorOn) {
+    const [x1, y1] = W2S(MA[0], MA[1]), [x2, y2] = W2S(MB[0], MB[1]);
+    mx.strokeStyle = C.mirror; mx.lineWidth = 4; mx.lineCap = "round"; mx.beginPath(); mx.moveTo(x1, y1); mx.lineTo(x2, y2); mx.stroke();
+    mx.lineCap = "butt"; mx.fillStyle = C.sub; mx.font = "11px 'Noto Serif TC',serif"; mx.textAlign = "left"; mx.fillText("鏡子", x2 + 6, y2);
+  }
+  // 眼睛：錐的頂點
+  const ang = -dir * Math.PI / 180, er = Math.max(6, EYE_R * S * 1.4);
+  mx.save(); mx.translate(OX, OY); mx.rotate(ang);
+  mx.fillStyle = "#0E0F12"; mx.strokeStyle = C.gold; mx.lineWidth = 1.6;
+  mx.beginPath(); mx.moveTo(-er * 1.3, 0); mx.quadraticCurveTo(0, -er * 1.1, er * 1.3, 0); mx.quadraticCurveTo(0, er * 1.1, -er * 1.3, 0); mx.fill(); mx.stroke();
+  mx.fillStyle = C.gold; mx.beginPath(); mx.arc(er * .35, 0, er * .45, 0, 7); mx.fill();
+  mx.restore();
+}
+
+// ---------- 第一人稱視野 ----------
+function shade(hex, f) {
+  const n = parseInt(hex.slice(1), 16), r = n >> 16, g = n >> 8 & 255, b = n & 255;
+  return `rgb(${Math.round(r * f)},${Math.round(g * f)},${Math.round(b * f)})`;
+}
+function drawView() {
+  if (!VW) return;
+  vx.clearRect(0, 0, VW, VH);
+  const top = 26, h0 = VH - top - 8, hor = top + h0 * .5, n = rays.length, cw = VW / n;
+  vx.fillStyle = "#12141A"; vx.fillRect(0, top, VW, h0 / 2);
+  vx.fillStyle = "#191B21"; vx.fillRect(0, hor, VW, h0 / 2);
+  // 光線由左到右：rel 大（左）到小（右）
+  for (let j = 0; j < n; j++) {
+    const h = rays[n - 1 - j], x = j * cw;
+    const hh = Math.min(h0 * .96, h0 * 1.4 / Math.max(h.t, .3));
+    let col;
+    if (h.k === "obj") col = KIND[world[h.i][3]].c;
+    else if (h.k === "eye") col = "#F2EEE4";
+    else col = "#4A4F5C";
+    const f = Math.max(.32, Math.min(1, 2.6 / Math.sqrt(h.t)));
+    vx.fillStyle = h.k === "wall" ? shade(col, Math.min(1, f + .2)) : shade(col, f);
+    vx.fillRect(x, hor - hh / 2, cw + .6, hh);
+    if (h.m) { vx.fillStyle = "rgba(185,198,211,.045)"; vx.fillRect(x, hor - h0 * .42, cw + .6, h0 * .84); vx.fillStyle = "rgba(185,198,211,.55)"; vx.fillRect(x, hor - h0 * .42, cw + .6, 1.5); vx.fillRect(x, hor + h0 * .42 - 1.5, cw + .6, 1.5); }
+    if (h === pick) { vx.strokeStyle = C.gold; vx.lineWidth = 1.5; vx.strokeRect(x, top + 2, Math.max(cw, 2), h0 - 4); }
+  }
+  // 鏡中眼睛的標記
+  const ej = rays.map((h, j) => h.k === "eye" ? n - 1 - j : -1).filter(j => j >= 0);
+  if (ej.length) {
+    const x = (ej[0] + ej[ej.length - 1] + 1) / 2 * cw, ew = Math.max(9, (ej.length * cw) / 2);
+    vx.strokeStyle = "#F2EEE4"; vx.lineWidth = 1.4; vx.fillStyle = "#0E0F12";
+    vx.beginPath(); vx.moveTo(x - ew, hor); vx.quadraticCurveTo(x, hor - ew * .8, x + ew, hor); vx.quadraticCurveTo(x, hor + ew * .8, x - ew, hor); vx.fill(); vx.stroke();
+    vx.fillStyle = "#F2EEE4"; vx.beginPath(); vx.arc(x, hor, ew * .32, 0, 7); vx.fill();
+    vx.font = "11px 'Noto Serif TC',serif"; vx.textAlign = "center";
+    vx.fillText("鏡中的眼睛（身體）", Math.min(VW - 60, Math.max(60, x)), top + 14);
+  }
+  if (showFig) drawFig();
+}
+// 5.6331 原書的示意圖：一個淚滴形的視野，眼睛畫在尖端。維根斯坦說：視野「不是」這種形式。
+function drawFig() {
+  const w = Math.min(VW * .62, 260, (VH - 44) * 2), h = w * .5, x0 = (VW - w) / 2, y0 = 26 + (VH - 30 - h) / 2;
+  vx.fillStyle = "rgba(14,15,18,.88)"; vx.fillRect(0, 22, VW, VH - 22);
+  vx.strokeStyle = C.txt; vx.lineWidth = 1.4;
+  const ex = x0 + w * .12, ey = y0 + h / 2;
+  vx.beginPath(); vx.moveTo(ex + 10, ey);
+  vx.bezierCurveTo(x0 + w * .45, y0 - h * .1, x0 + w * 1.02, y0 + h * .05, x0 + w * .98, ey);
+  vx.bezierCurveTo(x0 + w * 1.02, y0 + h * .95, x0 + w * .45, y0 + h * 1.1, ex + 10, ey); vx.stroke();
+  vx.beginPath(); vx.moveTo(ex - 10, ey); vx.quadraticCurveTo(ex, ey - 9, ex + 10, ey); vx.quadraticCurveTo(ex, ey + 9, ex - 10, ey); vx.stroke();
+  vx.beginPath(); vx.arc(ex + 1, ey, 3, 0, 7); vx.fillStyle = C.txt; vx.fill();
+  vx.strokeStyle = C.rust; vx.lineWidth = 2.2; vx.beginPath(); vx.moveTo(x0, y0); vx.lineTo(x0 + w, y0 + h); vx.moveTo(x0 + w, y0); vx.lineTo(x0, y0 + h); vx.stroke();
+}
+function render() { compute(); drawMap(); drawView(); }
+
+// ---------- 互動 ----------
+function setDir(d) { dir = ((d + 540) % 360) - 180; $("sDir").value = Math.round(dir); $("oDir").textContent = Math.round(dir) + "°"; pick = null; render(); }
+function mapPointer(e) {
+  const r = map.getBoundingClientRect(), x = e.clientX - r.left, y = e.clientY - r.top;
+  if (Math.hypot(x - OX, y - OY) < 4) return;
+  setDir(Math.atan2(OY - y, x - OX) * 180 / Math.PI);
+}
+let dragging = false;
+map.addEventListener("pointerdown", e => { dragging = true; map.setPointerCapture(e.pointerId); mapPointer(e); });
+map.addEventListener("pointermove", e => { if (dragging) mapPointer(e); });
+map.addEventListener("pointerup", () => dragging = false);
+map.addEventListener("pointercancel", () => dragging = false);
+view.addEventListener("pointerdown", e => {
+  const r = view.getBoundingClientRect(), n = rays.length, j = Math.min(n - 1, Math.max(0, Math.floor((e.clientX - r.left) / (r.width / n))));
+  pick = rays[n - 1 - j];
+  const edge = j === 0 || j === n - 1;
+  $("rPickH").textContent = edge ? "你點的是視野最邊緣的那一欄" : "你點的那一點";
+  $("rPick").textContent = describe(pick) + (edge ? "。邊緣那一欄看到的仍然是世界裡的東西，不是「邊界」本身：界限不是視野中的一個點。" : "");
+  drawMap(); drawView();
+});
+$("sDir").oninput = e => setDir(+e.target.value);
+$("sFov").oninput = e => { fov = +e.target.value; $("oFov").textContent = fov + "°"; pick = null; render(); };
+$("bMirror").onclick = () => { mirrorOn = !mirrorOn; $("bMirror").classList.toggle("on", mirrorOn); $("bMirror").textContent = mirrorOn ? "拿走鏡子" : "放一面鏡子"; pick = null; render(); };
+$("bLook").onclick = () => { if (!mirrorOn) $("bMirror").click(); setDir(-45); };
+$("bFig").onclick = () => {
+  showFig = !showFig; $("bFig").classList.toggle("on", showFig);
+  if (showFig) {
+    $("rPickH").textContent = "5.6331：視野並不具有這種形式";
+    $("rPick").textContent = "原書這裡畫了一隻眼睛和一個淚滴形的視野。這張圖是從「外面」畫的：畫的人站在眼睛旁邊看。可是從視野裡面看出去，你看不到那隻眼睛，也看不到那條外框。再按一次收起這張圖。";
+  }
+  drawView();
+};
+setDir(60);
+})();
+</script>
+</body>
+</html>

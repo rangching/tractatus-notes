@@ -1,0 +1,262 @@
+<!doctype html>
+<html lang="zh-Hant-TW">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>梯子</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@400;600&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#0E0F12;--panel:#15171C;--line:#2A2D35;--txt:#EDE6D6;--sub:#9A9384;--gold:#D4A84B;--blue:#6FA3D8;--teal:#5FB8A6;--rust:#C9644A;--m7:#F2EEE4}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;background:var(--bg);color:var(--txt);font-family:"Noto Serif TC","PingFang TC",serif;overflow:hidden;-webkit-tap-highlight-color:transparent}
+body{background-image:linear-gradient(rgba(237,230,214,.035) 1px,transparent 1px),linear-gradient(90deg,rgba(237,230,214,.035) 1px,transparent 1px);background-size:22px 22px;transition:background-color 1.2s}
+body.silent{background-image:none}
+.num{font-family:"JetBrains Mono",ui-monospace,Menlo,monospace}
+#app{position:absolute;inset:0;display:grid;gap:8px;padding:8px;grid-template-columns:minmax(0,1fr) minmax(260px,.85fr);grid-template-rows:auto minmax(0,1fr) auto;grid-template-areas:"head head" "stage card" "ctrl ctrl"}
+#app.portrait{grid-template-columns:1fr;grid-template-rows:auto minmax(0,1.2fr) minmax(0,.8fr) auto;grid-template-areas:"head" "stage" "card" "ctrl"}
+header{grid-area:head;display:flex;align-items:baseline;gap:10px;min-width:0;transition:opacity 1s}
+header h1{font-size:15px;font-weight:600;white-space:nowrap}
+header span{font-size:12px;color:var(--sub);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.box{background:rgba(21,23,28,.92);border:1px solid var(--line);border-radius:10px;position:relative;min-height:0;min-width:0;overflow:hidden;transition:opacity 1.2s,border-color 1.2s,background-color 1.2s}
+#stage{grid-area:stage}
+canvas{display:block;width:100%;height:100%;touch-action:none}
+.tag{position:absolute;right:10px;bottom:6px;font-size:10px;color:var(--sub);pointer-events:none;transition:opacity 1s}
+#card{grid-area:card;padding:12px 14px;overflow:auto;display:flex;flex-direction:column;gap:8px}
+#card .ep{font-size:12px;color:var(--sub)}
+#card h2{font-size:16px;font-weight:600;line-height:1.4}
+#card .pn{font-family:"JetBrains Mono",monospace;color:var(--gold);font-size:13px}
+#card .zh{font-size:15px;line-height:1.75;white-space:pre-line}
+#card .de,#card .en{font-size:12.5px;line-height:1.6;color:var(--sub);white-space:pre-line}
+#card .de{font-style:italic}
+#card em{font-style:normal;color:var(--gold)}
+#stat{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;font-size:11px;color:var(--sub);border-top:1px solid var(--line);padding-top:8px;margin-top:auto}
+#stat b{display:block;color:var(--txt);font-size:14px;font-weight:600}
+#ctrl{grid-area:ctrl;display:flex;flex-wrap:wrap;align-items:center;gap:8px 10px;padding:8px 10px}
+button{background:#1C1F26;color:var(--txt);border:1px solid var(--line);border-radius:8px;padding:6px 12px;font:inherit;font-size:13px;cursor:pointer;min-height:34px}
+button:active{background:#262A33}
+button:disabled{opacity:.35;cursor:default}
+button.on{border-color:var(--gold);color:var(--gold)}
+#bDrop{border-color:var(--m7);color:var(--m7)}
+.silent .box{background:transparent;border-color:transparent}
+.silent header,.silent .tag{opacity:0}
+.silent #card{display:none}
+#app.silent{grid-template-columns:1fr;grid-template-rows:auto minmax(0,1fr) auto;grid-template-areas:"head" "stage" "ctrl"}
+.silent #ctrl{opacity:.25}
+#app.portrait #card{padding:10px}
+#app.portrait #card .zh{font-size:14px}
+#app.portrait button{min-height:30px;padding:4px 9px;font-size:12px}
+</style>
+</head>
+<body>
+<div id="app">
+  <header><h1>梯子</h1><span>6.54：爬上去之後，必須把梯子丟掉</span></header>
+  <div id="stage" class="box"><canvas id="cv"></canvas><span class="tag">526 顆光點＝全書 526 條命題・資料驅動</span></div>
+  <div id="card" class="box">
+    <div class="ep" id="cEp">準備爬梯子</div>
+    <h2 id="cTitle">十二級，每一級是一集</h2>
+    <div class="pn" id="cNum"></div>
+    <div class="zh" id="cZh">每一級由那一集讀過的命題組成：一條命題是一顆光點，顏色是它所屬的主命題。按「往上爬一級」，點亮一整級，右邊會顯示那一集的關鍵命題。點畫面上的任一顆光點，也能讀那一條。</div>
+    <div class="de" id="cDe"></div>
+    <div class="en" id="cEn"></div>
+    <div id="stat"><div>已點亮<b class="num" id="sLit">0 / 526</b></div><div>這一級<b class="num" id="sRung">—</b></div><div>占全書<b class="num" id="sPct">—</b></div></div>
+  </div>
+  <div id="ctrl" class="box">
+    <button id="bUp" class="on">往上爬一級</button>
+    <button id="bAuto">自動爬</button>
+    <button id="bDrop" disabled>丟掉梯子</button>
+    <button id="bReset">重來</button>
+  </div>
+</div>
+<script src="../data/tlp_props.js"></script>
+<script>
+(() => {
+"use strict";
+const $ = id => document.getElementById(id);
+const PROPS = window.TLP_PROPS || [];
+const MC = { 1: "#C9B98F", 2: "#5FB8A6", 3: "#D4A84B", 4: "#6FA3D8", 5: "#8E86D6", 6: "#B98AC2", 7: "#F2EEE4" };
+const EPS = [
+  ["EP01", "一本想終結哲學的書", "1"],
+  ["EP02", "世界是事實，不是物", "1.1"],
+  ["EP03", "對象、事態與邏輯空間", "2.04"],
+  ["EP04", "圖像論：巴黎法庭的玩具車", "2.1"],
+  ["EP05", "思想、命題與名稱", "3"],
+  ["EP06", "可說的與可顯示的", "4.1212"],
+  ["EP07", "真值表：命題是一張可能性地圖", "4.461"],
+  ["EP08", "邏輯常項不代表任何東西", "5.4"],
+  ["EP09", "一個運算生成一切", "6"],
+  ["EP10", "我的語言的界限，就是我的世界的界限", "5.6"],
+  ["EP11", "邏輯、數學與科學：牛頓力學是一張網", "6.13"],
+  ["EP12", "價值、神祕與丟掉梯子", "6.54"]
+];
+const byNum = new Map(PROPS.map(p => [p.n, p]));
+
+// ---------- 由資料分配光點：主命題 1–6 屬第 1 級，其餘依 e（集數）欄，第 7 命題留在頂端 ----------
+const rungs = EPS.map(() => []);
+let top = null;
+for (const p of PROPS) {
+  if (p.n === "7") { top = p; continue; }
+  const i = p.d === 0 ? 0 : parseInt(String(p.e).slice(1), 10) - 1;
+  if (i >= 0 && i < 12) rungs[i].push(p);
+}
+const TOTAL = PROPS.length;
+
+// ---------- 狀態 ----------
+let level = 0, phase = "climb", parts = [], t0 = 0, auto = null, pickP = null, silentAt = 0;
+const cv = $("cv"), ctx = cv.getContext("2d"), app = $("app");
+let CW = 0, CH = 0;
+function fit() {
+  const r = cv.getBoundingClientRect(), dpr = Math.min(window.devicePixelRatio || 1, 2);
+  cv.width = Math.max(1, Math.round(r.width * dpr)); cv.height = Math.max(1, Math.round(r.height * dpr));
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0); CW = r.width; CH = r.height;
+}
+function layout() { app.classList.toggle("portrait", window.innerHeight > window.innerWidth * 1.05 || window.innerWidth < 640); fit(); geom(); draw(); }
+new ResizeObserver(layout).observe(document.body);
+
+// 幾何：每一級的 y、光點的 x
+let G = null;
+function geom() {
+  const padT = 54, padB = 24, h = CH - padT - padB, w = Math.min(CW * .8, 420), x0 = (CW - w) / 2;
+  const ys = EPS.map((_, i) => padT + h - (i + .5) * h / 12);
+  const pts = [];
+  rungs.forEach((list, i) => {
+    const n = list.length, inner = w - 18;
+    list.forEach((p, j) => pts.push({ p, r: i, x: x0 + 9 + (n === 1 ? inner / 2 : inner * j / (n - 1)), y: ys[i] }));
+  });
+  G = { x0, w, ys, pts, topY: padT - 30, topX: CW / 2, railTop: padT - 6, railBot: CH - padB + 6 };
+}
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const emph = s => esc(s).replace(/\*([^*\n]+)\*/g, "<em>$1</em>");
+function showProp(p, ep, title) {
+  $("cEp").textContent = ep; $("cTitle").textContent = title;
+  $("cNum").textContent = p ? p.n : ""; $("cZh").innerHTML = p ? emph(p.zh) : "";
+  $("cDe").innerHTML = p ? emph(p.de) : ""; $("cEn").innerHTML = p ? emph(p.en) : "";
+}
+function stats() {
+  const lit = rungs.slice(0, level).reduce((a, r) => a + r.length, 0);
+  $("sLit").textContent = lit + " / " + TOTAL;
+  if (level > 0) { const n = rungs[level - 1].length; $("sRung").textContent = n + " 條"; $("sPct").textContent = (n / TOTAL * 100).toFixed(1) + "%"; }
+  else { $("sRung").textContent = "—"; $("sPct").textContent = "—"; }
+  $("bUp").disabled = level >= 12 || phase !== "climb";
+  $("bAuto").disabled = level >= 12 || phase !== "climb";
+  $("bDrop").disabled = !(level >= 12 && phase === "climb");
+}
+function climb() {
+  if (level >= 12 || phase !== "climb") return;
+  level++; pickP = null;
+  const [ep, title, key] = EPS[level - 1];
+  showProp(byNum.get(key), `第 ${level} 級｜${ep}`, title);
+  if (level === 12) { $("cEp").textContent = "第 12 級｜EP12　頂端到了"; stopAuto(); }
+  stats(); draw();
+}
+function stopAuto() { if (auto) { clearInterval(auto); auto = null; } $("bAuto").textContent = "自動爬"; $("bAuto").classList.remove("on"); }
+
+// ---------- 丟掉梯子：每顆光點以簡單的拋體運動散去（固定種子，每次都一樣） ----------
+function mulberry32(a) { return function () { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+function drop() {
+  if (!(level >= 12 && phase === "climb")) return;
+  phase = "drop"; t0 = performance.now(); const rnd = mulberry32(654);
+  const cx = CW / 2, cy = CH / 2;
+  parts = G.pts.map(q => {
+    const dx = q.x - cx, dy = q.y - cy, L = Math.hypot(dx, dy) || 1, sp = 40 + 120 * rnd();
+    return { x: q.x, y: q.y, vx: dx / L * sp + (rnd() - .5) * 60, vy: dy / L * sp - 60 * rnd(), c: MC[q.p.m], delay: (11 - q.r) * .05 + rnd() * .25, r: 1.6 + rnd() };
+  });
+  showProp(null, "", ""); stats(); requestAnimationFrame(tick);
+}
+function tick(now) {
+  if (phase === "climb") return;
+  const t = (now - t0) / 1000;
+  if (phase === "drop") {
+    const dt = 1 / 60;
+    for (const q of parts) { if (t < q.delay) continue; q.vy += 180 * dt; q.x += q.vx * dt; q.y += q.vy * dt; }
+    if (t > 3.2) { phase = "silent"; silentAt = now; document.body.classList.add("silent"); app.classList.add("silent"); fit(); geom(); }
+  }
+  draw(t);
+  if (phase === "drop" || (phase === "silent" && now - silentAt < 2500)) requestAnimationFrame(tick);
+}
+
+// ---------- 繪圖 ----------
+function draw(t = 0) {
+  if (!CW || !G) return;
+  ctx.clearRect(0, 0, CW, CH);
+  if (phase === "silent") { drawSeven(1); return; }
+  const fade = phase === "drop" ? Math.max(0, 1 - t / 1.6) : 1;
+  // 欄杆
+  ctx.globalAlpha = .55 * fade; ctx.strokeStyle = "#5A5548"; ctx.lineWidth = 2;
+  for (const x of [G.x0, G.x0 + G.w]) { ctx.beginPath(); ctx.moveTo(x, G.railBot); ctx.lineTo(x, G.railTop); ctx.stroke(); }
+  ctx.globalAlpha = 1;
+  if (phase === "drop") {
+    for (const q of parts) { const a = Math.max(0, 1 - Math.max(0, t - q.delay) / 2.2); if (a <= 0) continue; ctx.globalAlpha = a; ctx.fillStyle = q.c; ctx.beginPath(); ctx.arc(q.x, q.y, q.r, 0, 7); ctx.fill(); }
+    ctx.globalAlpha = 1; drawSeven(Math.min(1, t / 2.5)); return;
+  }
+  // 每一級的底線與光點
+  ctx.font = "10px 'JetBrains Mono',monospace"; ctx.textAlign = "right";
+  G.ys.forEach((y, i) => {
+    const lit = i < level;
+    ctx.strokeStyle = lit ? "rgba(237,230,214,.22)" : "rgba(237,230,214,.07)"; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(G.x0, y); ctx.lineTo(G.x0 + G.w, y); ctx.stroke();
+    ctx.fillStyle = lit ? "#EDE6D6" : "#5A5548"; ctx.fillText(EPS[i][0], G.x0 - 8, y + 3);
+  });
+  for (const q of G.pts) {
+    const lit = q.r < level, cur = q.r === level - 1;
+    ctx.globalAlpha = lit ? 1 : .16; ctx.fillStyle = MC[q.p.m];
+    if (cur) { ctx.shadowColor = MC[q.p.m]; ctx.shadowBlur = 6; }
+    ctx.beginPath(); ctx.arc(q.x, q.y, cur ? 2.4 : 1.9, 0, 7); ctx.fill(); ctx.shadowBlur = 0;
+  }
+  ctx.globalAlpha = 1;
+  if (level > 0) { // 關鍵命題的那顆光點與攀爬者
+    const key = EPS[level - 1][2], q = G.pts.find(z => z.p.n === key);
+    const y = G.ys[level - 1];
+    ctx.strokeStyle = "#D4A84B"; ctx.lineWidth = 1.6; ctx.beginPath(); ctx.arc(G.x0 - 1, y, 6, 0, 7); ctx.stroke();
+    if (q) { ctx.beginPath(); ctx.arc(q.x, q.y, 6, 0, 7); ctx.stroke(); }
+  }
+  if (pickP) { ctx.strokeStyle = "#EDE6D6"; ctx.lineWidth = 1.4; ctx.beginPath(); ctx.arc(pickP.x, pickP.y, 5, 0, 7); ctx.stroke(); }
+  drawSeven(level >= 12 ? 1 : .22);
+}
+function drawSeven(a) {
+  const silent = phase === "silent", y = silent ? CH / 2 : G.topY, size = silent ? Math.min(26, CW / 16) : 13;
+  ctx.globalAlpha = a; ctx.fillStyle = MC[7]; ctx.textAlign = "center";
+  if (silent) {
+    ctx.font = `600 ${size}px 'Noto Serif TC',serif`; ctx.fillText(top ? top.zh : "", CW / 2, y);
+    ctx.globalAlpha = a * .55; ctx.font = `italic ${Math.max(11, size * .5)}px 'Noto Serif TC',serif`;
+    ctx.fillText(top ? top.de : "", CW / 2, y + size * 1.4);
+    ctx.font = `${Math.max(10, size * .42)}px 'JetBrains Mono',monospace`; ctx.fillText("7", CW / 2, y - size * 1.6);
+  } else {
+    ctx.beginPath(); ctx.arc(G.topX, y, 3.2, 0, 7); ctx.fill();
+    ctx.font = "11px 'JetBrains Mono',monospace"; ctx.fillText("7", G.topX, y - 9);
+  }
+  ctx.globalAlpha = 1;
+}
+
+// ---------- 互動 ----------
+cv.addEventListener("pointerdown", e => {
+  if (phase !== "climb" || !G) return;
+  const r = cv.getBoundingClientRect(), x = e.clientX - r.left, y = e.clientY - r.top;
+  if (Math.hypot(x - G.topX, y - G.topY) < 14) { showProp(top, "頂端", level >= 12 ? "最後一句" : "最後一句（先爬上來）"); pickP = null; draw(); return; }
+  let best = null, bd = 14;
+  for (const q of G.pts) { const d = Math.hypot(q.x - x, q.y - y); if (d < bd) { bd = d; best = q; } }
+  if (!best) return;
+  pickP = best;
+  showProp(best.p, `${EPS[best.r][0]} 的命題` + (best.r < level ? "" : "（這一級還沒爬到）"), EPS[best.r][1]);
+  draw();
+});
+$("bUp").onclick = climb;
+$("bAuto").onclick = () => {
+  if (auto) { stopAuto(); return; }
+  $("bAuto").textContent = "停"; $("bAuto").classList.add("on"); climb(); auto = setInterval(climb, 1400);
+};
+$("bDrop").onclick = drop;
+$("bReset").onclick = () => {
+  stopAuto(); level = 0; phase = "climb"; parts = []; pickP = null;
+  document.body.classList.remove("silent"); app.classList.remove("silent"); fit();
+  showProp(null, "準備爬梯子", "十二級，每一級是一集");
+  $("cZh").textContent = "每一級由那一集讀過的命題組成：一條命題是一顆光點，顏色是它所屬的主命題。按「往上爬一級」，點亮一整級，右邊會顯示那一集的關鍵命題。";
+  stats(); geom(); draw();
+};
+if (!PROPS.length) { $("cZh").textContent = "讀不到命題資料（../data/tlp_props.js）。"; }
+stats();
+})();
+</script>
+</body>
+</html>

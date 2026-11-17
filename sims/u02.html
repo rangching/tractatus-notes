@@ -1,0 +1,265 @@
+<!doctype html>
+<html lang="zh-Hant-TW">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>同一組積木，幾個世界？</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@400;600&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#0E0F12;--panel:rgba(20,22,27,.92);--line:#2A2D35;--txt:#EDE6D6;--sub:#9A9384;--gold:#D4A84B;--blue:#6FA3D8;--teal:#5FB8A6;--rust:#C9644A}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;overflow:hidden;color:var(--txt);font-family:"Noto Serif TC","PingFang TC",serif;-webkit-tap-highlight-color:transparent;
+  background-color:var(--bg);
+  background-image:linear-gradient(rgba(237,230,214,.035) 1px,transparent 1px),linear-gradient(90deg,rgba(237,230,214,.035) 1px,transparent 1px);
+  background-size:24px 24px}
+.mono{font-family:"JetBrains Mono",ui-monospace,Menlo,monospace}
+#app{position:absolute;inset:0;display:grid;gap:8px;padding:8px;grid-template-columns:minmax(0,1fr) minmax(0,1.05fr);grid-template-rows:auto minmax(0,1fr) auto;grid-template-areas:"head head" "stage side" "ctrl ctrl"}
+#app.portrait{grid-template-columns:minmax(0,1fr);grid-template-rows:auto minmax(0,1fr) minmax(0,1.1fr) auto;grid-template-areas:"head" "stage" "side" "ctrl"}
+header{grid-area:head;display:flex;align-items:baseline;gap:10px;min-width:0}
+header h1{font-size:15px;font-weight:600;white-space:nowrap}
+header span{font-size:12px;color:var(--sub);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.box{background:var(--panel);border:1px solid var(--line);border-radius:10px;position:relative;min-height:0;min-width:0;overflow:hidden}
+#stage{grid-area:stage}
+canvas{display:block;width:100%;height:100%;touch-action:manipulation}
+#side{grid-area:side;display:flex;flex-direction:column;overflow-y:auto}
+#read{display:grid;grid-template-columns:repeat(4,1fr);gap:4px;padding:8px 10px;font-size:11px;color:var(--sub);border-bottom:1px solid var(--line)}
+#read div{display:flex;flex-direction:column;min-width:0}
+#read b{font-family:"JetBrains Mono",monospace;font-size:16px;color:var(--txt);font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sec{padding:8px 10px;border-bottom:1px solid var(--line)}
+.sec h3{font-size:12px;font-weight:400;color:var(--sub);margin-bottom:5px;display:flex;justify-content:space-between;gap:6px;align-items:center}
+#facts{display:flex;flex-wrap:wrap;gap:4px}
+.fact{font-family:"JetBrains Mono",monospace;font-size:12px;border-radius:6px;padding:2px 7px;cursor:pointer;border:1px solid;min-height:26px;background:none}
+.fact.on{color:#5FB8A6;border-color:#5FB8A6;background:rgba(95,184,166,.12)}
+.fact.off{color:#C9644A;border-color:rgba(201,100,74,.55);text-decoration:line-through;opacity:.8}
+#thumbs{display:block;width:100%;height:auto;cursor:pointer}
+.pager{display:flex;gap:4px;align-items:center}
+.pager button{min-height:24px;padding:0 8px;font-size:12px}
+#hist{display:block;width:100%;height:70px}
+#ctrl{grid-area:ctrl;display:flex;flex-wrap:wrap;align-items:center;gap:6px 14px;padding:6px 10px}
+label{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--sub)}
+label.grow{flex:1 1 180px;min-width:150px}
+input[type=range]{flex:1;accent-color:var(--gold);height:28px;min-width:70px}
+output{font-family:"JetBrains Mono",monospace;color:var(--txt);min-width:14px}
+select,button{background:#1B1E24;color:var(--txt);border:1px solid var(--line);border-radius:8px;padding:5px 10px;font:inherit;font-size:13px;min-height:32px;cursor:pointer}
+button:active{background:#262A31}
+.tag{position:absolute;right:8px;bottom:5px;font-size:10px;color:var(--sub);pointer-events:none}
+.cap{position:absolute;left:10px;top:8px;font-size:12px;color:var(--sub);pointer-events:none;line-height:1.6}
+.cap b{color:var(--gold);font-family:"JetBrains Mono",monospace;font-weight:600}
+#app.portrait header span{display:none}
+#app.portrait .cap{font-size:11px}
+#app.portrait label.grow{flex:1 1 120px;min-width:110px}
+#app.portrait #read b{font-size:13px}
+#app.portrait #ctrl{gap:4px 10px;padding:5px 8px}
+#app.portrait #ctrl select,#app.portrait #ctrl button{padding:4px 8px;font-size:12px}
+</style>
+</head>
+<body>
+<div id="app">
+  <header><h1>同一組積木，幾個世界？</h1><span>物的清單不變，事實的組合決定世界（1.1、1.21）</span></header>
+  <div id="stage" class="box"><canvas id="cv" aria-label="目前的世界：對象與成立、不成立的事態，點線段可切換"></canvas>
+    <div class="cap" id="cap"></div><span class="tag">點連線＝只改這一件事</span></div>
+  <div id="side" class="box">
+    <div id="read">
+      <div><small>物的數目</small><b id="rObj">—</b></div>
+      <div><small>可能的事態</small><b id="rK">—</b></div>
+      <div><small>可能世界 2^K</small><b id="rW" style="color:var(--gold)">—</b></div>
+      <div><small>成立／不成立</small><b id="rOn">—</b></div>
+    </div>
+    <div class="sec"><h3><span>事態清單（點一下：只改這一件，其餘不變）</span></h3><div id="facts"></div></div>
+    <div class="sec"><h3><span id="thTitle">全部可能世界</span><span class="pager"><button id="pPrev" aria-label="上一頁">‹</button><span id="pInfo" class="mono"></span><button id="pNext" aria-label="下一頁">›</button></span></h3><canvas id="thumbs" aria-label="可能世界縮圖，點選切換"></canvas></div>
+    <div class="sec"><h3><span>恰好有 k 件事成立的世界數（實際列舉）</span></h3><canvas id="hist"></canvas></div>
+  </div>
+  <div id="ctrl" class="box">
+    <label class="grow">對象數 <input id="nObj" type="range" min="2" max="5" step="1" value="3"><output id="oObj">3</output></label>
+    <label>關係 <select id="rel"><option value="u">相連（不分方向）</option><option value="d">指向（有方向）</option></select></label>
+    <button id="bNone">全不成立</button>
+    <button id="bRand">隨機世界</button>
+  </div>
+</div>
+<script>
+(() => {
+"use strict";
+const $ = id => document.getElementById(id);
+const C = { gold: "#D4A84B", blue: "#6FA3D8", teal: "#5FB8A6", rust: "#C9644A", txt: "#EDE6D6", sub: "#9A9384", line: "#2A2D35" };
+const OBJ_COL = ["#C9B98F", "#6FA3D8", "#8E86D6", "#B98AC2", "#D4A84B"];
+const NAMES = "abcde";
+const app = $("app"), cv = $("cv"), ctx = cv.getContext("2d"), th = $("thumbs"), tx = th.getContext("2d"), hi = $("hist"), hx = hi.getContext("2d");
+
+// ---------- 狀態：n 個對象、一種關係 → K 個可能事態 → 2^K 個世界 ----------
+let n = 3, rel = "u", facts = [], K = 0, world = 0, page = 0, prevWorld = null;
+const PER = 64;
+function buildFacts() {
+  facts = [];
+  for (let i = 0; i < n; i++) for (let j = 0; j < n; j++) {
+    if (i === j) continue;
+    if (rel === "u" && j < i) continue;
+    facts.push([i, j]);
+  }
+  K = facts.length;
+}
+const holds = (w, k) => Math.floor(w / Math.pow(2, k)) % 2 === 1;   // K 最多 20，仍在安全整數內
+const popcount = w => { let c = 0; for (let k = 0; k < K; k++) if (holds(w, k)) c++; return c; };
+const total = () => Math.pow(2, K);
+const flip = (w, k) => holds(w, k) ? w - Math.pow(2, k) : w + Math.pow(2, k);
+const factName = f => rel === "u" ? `${NAMES[f[0]]}–${NAMES[f[1]]}` : `${NAMES[f[0]]}→${NAMES[f[1]]}`;
+
+// 實際列舉 2^K 個世界，統計「恰好 k 件成立」的數目（K ≤ 20 → 最多約 105 萬次）
+let histo = [];
+function enumerate() {
+  histo = Array(K + 1).fill(0);
+  const T = total();
+  for (let w = 0; w < T; w++) { let c = 0, x = w; while (x) { c += x & 1; x >>>= 1; } histo[c]++; }
+}
+
+// ---------- 版面 ----------
+function fit(c, hFix) {
+  const r = c.getBoundingClientRect(), dpr = Math.min(devicePixelRatio || 1, 2);
+  const h = hFix || r.height;
+  c.width = Math.max(1, r.width * dpr | 0); c.height = Math.max(1, h * dpr | 0);
+  c.getContext("2d").setTransform(dpr, 0, 0, dpr, 0, 0); return { w: r.width, h };
+}
+let SW = 0, SH = 0, TW = 0, TH = 0, HW = 0, HH = 0, cols = 8;
+function layout() {
+  app.classList.toggle("portrait", innerHeight > innerWidth * 1.05);
+  ({ w: SW, h: SH } = fit(cv));
+  const tw = th.getBoundingClientRect().width;
+  cols = Math.max(4, Math.min(8, Math.floor(tw / 44)));
+  const shown = Math.min(PER, total() - page * PER), rows = Math.ceil(shown / cols);
+  th.style.height = (rows * tw / cols) + "px";
+  ({ w: TW, h: TH } = fit(th, rows * tw / cols));
+  ({ w: HW, h: HH } = fit(hi));
+  drawAll();
+}
+
+// ---------- 畫一個世界 ----------
+function objPos(cx, cy, R) {
+  return Array.from({ length: n }, (_, i) => {
+    const a = -Math.PI / 2 + i * 2 * Math.PI / n + (n === 2 ? Math.PI / 2 : 0);
+    return [cx + R * Math.cos(a), cy + R * Math.sin(a)];
+  });
+}
+function edgeGeom(P, f, curve) {
+  const [a, b] = [P[f[0]], P[f[1]]];
+  if (rel === "u" || !curve) return { a, b, c: [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2] };
+  const mx = (a[0] + b[0]) / 2, my = (a[1] + b[1]) / 2, dx = b[0] - a[0], dy = b[1] - a[1], L = Math.hypot(dx, dy);
+  const off = L * 0.13;                       // 有方向時 a→b 與 b→a 各彎向一邊
+  return { a, b, c: [mx - dy / L * off, my + dx / L * off] };
+}
+function drawWorld(g, w, cx, cy, R, big) {
+  const P = objPos(cx, cy, R), rObj = big ? Math.max(14, R * 0.17) : Math.max(2.5, R * 0.2);
+  facts.forEach((f, k) => {
+    const on = holds(w, k), { a, b, c } = edgeGeom(P, f, true);
+    g.strokeStyle = on ? C.teal : C.rust; g.globalAlpha = on ? 1 : (big ? 0.7 : 0.3);
+    g.lineWidth = on ? (big ? 3.2 : 1.6) : (big ? 1.4 : 0.8);
+    g.setLineDash(on ? [] : (big ? [5, 6] : [2, 3]));
+    g.beginPath(); g.moveTo(a[0], a[1]); g.quadraticCurveTo(c[0], c[1], b[0], b[1]); g.stroke();
+    g.setLineDash([]);
+    if (rel === "d" && big) {                       // 箭頭：取曲線末端切線
+      const t = 1 - (rObj + 4) / Math.hypot(b[0] - a[0], b[1] - a[1]);
+      const px = (1 - t) * (1 - t) * a[0] + 2 * (1 - t) * t * c[0] + t * t * b[0], py = (1 - t) * (1 - t) * a[1] + 2 * (1 - t) * t * c[1] + t * t * b[1];
+      const ang = Math.atan2(b[1] - c[1], b[0] - c[0]), s = 9;
+      g.fillStyle = g.strokeStyle; g.beginPath();
+      g.moveTo(px, py); g.lineTo(px - s * Math.cos(ang - 0.4), py - s * Math.sin(ang - 0.4)); g.lineTo(px - s * Math.cos(ang + 0.4), py - s * Math.sin(ang + 0.4)); g.fill();
+    }
+  });
+  g.globalAlpha = 1;
+  P.forEach((p, i) => {
+    g.fillStyle = OBJ_COL[i]; g.beginPath(); g.arc(p[0], p[1], rObj, 0, 7); g.fill();
+    if (big) { g.fillStyle = "#0E0F12"; g.font = `600 ${Math.round(rObj)}px 'JetBrains Mono',monospace`; g.textAlign = "center"; g.textBaseline = "middle"; g.fillText(NAMES[i], p[0], p[1] + 1); }
+  });
+}
+let geomBig = null;
+function drawStage() {
+  if (!SW) return;
+  ctx.clearRect(0, 0, SW, SH);
+  const on = popcount(world);
+  const bits = facts.map((_, k) => holds(world, k) ? "1" : "0").join("");
+  $("cap").innerHTML = `物的清單：{ ${NAMES.slice(0, n).split("").join(", ")} }（每個世界都一樣）<br>`
+    + `世界 <b>#${world + 1}</b> / ${total().toLocaleString()}　<span class="mono">${bits}</span>`
+    + (prevWorld != null && prevWorld !== world ? `<br>和上一個世界相差 <b>${diff(prevWorld, world)}</b> 件事` : "");
+  const top = $("cap").offsetHeight + 14, avail = SH - top - 16;
+  const R = Math.max(30, Math.min(SW * 0.8, avail) * 0.4), cx = SW / 2, cy = top + avail / 2;
+  geomBig = { cx, cy, R };
+  drawWorld(ctx, world, cx, cy, R, true);
+}
+const diff = (a, b) => { let d = 0; for (let k = 0; k < K; k++) if (holds(a, k) !== holds(b, k)) d++; return d; };
+function drawThumbs() {
+  if (!TW) return;
+  tx.clearRect(0, 0, TW, TH);
+  const cell = TW / cols, start = page * PER, shown = Math.min(PER, total() - start);
+  for (let i = 0; i < shown; i++) {
+    const w = start + i, x = (i % cols) * cell, y = Math.floor(i / cols) * cell;
+    if (w === world) { tx.fillStyle = "rgba(212,168,75,.18)"; tx.fillRect(x + 1, y + 1, cell - 2, cell - 2); tx.strokeStyle = C.gold; tx.lineWidth = 1.5; tx.strokeRect(x + 1.5, y + 1.5, cell - 3, cell - 3); }
+    else if (diff(w, world) === 1) { tx.strokeStyle = "rgba(95,184,166,.6)"; tx.lineWidth = 1; tx.strokeRect(x + 2, y + 2, cell - 4, cell - 4); }
+    drawWorld(tx, w, x + cell / 2, y + cell / 2, cell * 0.32, false);
+  }
+  $("pInfo").textContent = `${(start + 1).toLocaleString()}–${(start + shown).toLocaleString()}`;
+  $("pPrev").disabled = page === 0; $("pNext").disabled = start + shown >= total();
+  $("thTitle").textContent = total() <= PER ? `全部 ${total()} 個可能世界（金框＝目前，青綠框＝只差一件）` : `可能世界（每頁 ${PER} 個，共 ${total().toLocaleString()} 個）`;
+}
+function drawHist() {
+  if (!HW) return;
+  hx.clearRect(0, 0, HW, HH);
+  const mx = Math.max(...histo), bw = HW / (K + 1), on = popcount(world);
+  hx.font = "10px 'JetBrains Mono',monospace"; hx.textAlign = "center";
+  histo.forEach((v, k) => {
+    const h = (HH - 26) * v / mx, x = k * bw;
+    hx.fillStyle = k === on ? C.gold : "rgba(111,163,216,.55)";
+    hx.fillRect(x + bw * 0.15, HH - 14 - h, bw * 0.7, h);
+    hx.fillStyle = C.sub; if (K <= 12 || k % 2 === 0) hx.fillText(k, x + bw / 2, HH - 3);
+    if (k === on) { hx.fillStyle = C.gold; hx.fillText(v.toLocaleString(), x + bw / 2, Math.max(10, HH - 18 - h)); }
+  });
+}
+function renderFacts() {
+  $("facts").innerHTML = facts.map((f, k) => `<button class="fact ${holds(world, k) ? "on" : "off"}" data-k="${k}">${factName(f)}</button>`).join("");
+}
+function readout() {
+  const on = popcount(world);
+  $("rObj").textContent = n; $("rK").textContent = K;
+  $("rW").textContent = total().toLocaleString();
+  $("rOn").textContent = on + "／" + (K - on);
+}
+function drawAll() { drawStage(); drawThumbs(); drawHist(); renderFacts(); readout(); }
+function setWorld(w) {
+  prevWorld = world; world = w;
+  const p = Math.floor(w / PER); if (p !== page) { page = p; layout(); return; }
+  drawAll();
+}
+function rebuild() { buildFacts(); enumerate(); world = Math.min(world, total() - 1); prevWorld = null; page = Math.floor(world / PER); layout(); }
+
+// ---------- 互動 ----------
+$("facts").addEventListener("click", e => { const b = e.target.closest("[data-k]"); if (b) setWorld(flip(world, +b.dataset.k)); });
+th.addEventListener("click", e => {
+  const r = th.getBoundingClientRect(), cell = r.width / cols;
+  const i = Math.floor((e.clientY - r.top) / cell) * cols + Math.floor((e.clientX - r.left) / cell), w = page * PER + i;
+  if (i >= 0 && i < PER && w < total()) setWorld(w);
+});
+cv.addEventListener("click", e => {                 // 點連線：切換最近的一條事態
+  if (!geomBig) return;
+  const r = cv.getBoundingClientRect(), x = e.clientX - r.left, y = e.clientY - r.top;
+  const P = objPos(geomBig.cx, geomBig.cy, geomBig.R);
+  let best = -1, bd = 22;
+  facts.forEach((f, k) => {
+    const { a, b, c } = edgeGeom(P, f, true);
+    for (let t = 0.12; t <= 0.88; t += 0.04) {
+      const px = (1 - t) * (1 - t) * a[0] + 2 * (1 - t) * t * c[0] + t * t * b[0], py = (1 - t) * (1 - t) * a[1] + 2 * (1 - t) * t * c[1] + t * t * b[1];
+      const d = Math.hypot(px - x, py - y); if (d < bd) { bd = d; best = k; }
+    }
+  });
+  if (best >= 0) setWorld(flip(world, best));
+});
+$("pPrev").onclick = () => { if (page > 0) { page--; layout(); } };
+$("pNext").onclick = () => { if ((page + 1) * PER < total()) { page++; layout(); } };
+$("nObj").oninput = e => { n = +e.target.value; $("oObj").textContent = n; world = 0; rebuild(); };
+$("rel").onchange = e => { rel = e.target.value; world = 0; rebuild(); };
+$("bNone").onclick = () => setWorld(0);
+$("bRand").onclick = () => setWorld(Math.floor(Math.random() * total()));
+
+buildFacts(); enumerate(); world = 5;
+new ResizeObserver(layout).observe(document.body);
+})();
+</script>
+</body>
+</html>

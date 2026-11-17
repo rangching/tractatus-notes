@@ -1,0 +1,233 @@
+<!doctype html>
+<html lang="zh-Hant-TW">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>記號與符號拆解器</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@400;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#0E0F12;--panel:rgba(20,22,27,.92);--line:#2A2D35;--txt:#EDE6D6;--sub:#9C9688;--gold:#D4A84B;--blue:#6FA3D8;--true:#5FB8A6;--false:#C9644A;
+  --name:#D4A84B;--concept:#6FA3D8;--cop:#5FB8A6;--eq:#8E86D6;--ex:#B98AC2}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{background:var(--bg);color:var(--txt);font-family:"Noto Serif TC","PingFang TC",serif;overflow-x:hidden;-webkit-tap-highlight-color:transparent}
+body{background-image:linear-gradient(rgba(237,230,214,.035) 1px,transparent 1px),linear-gradient(90deg,rgba(237,230,214,.035) 1px,transparent 1px);background-size:22px 22px;padding:8px}
+.mono{font-family:"JetBrains Mono",ui-monospace,Menlo,monospace}
+header{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;margin-bottom:8px}
+header h1{font-size:15px;color:var(--gold)}
+header span{font-size:12px;color:var(--sub)}
+.box{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:10px;min-width:0}
+#grid{display:grid;grid-template-columns:minmax(0,1.4fr) minmax(0,1fr);gap:8px}
+@media (max-width:700px){#grid{grid-template-columns:minmax(0,1fr)}}
+form{display:flex;gap:6px;flex-wrap:wrap}
+input[type=text]{flex:1 1 180px;min-width:0;background:#15171C;border:1px solid var(--line);border-radius:8px;color:var(--txt);font:inherit;font-size:16px;padding:7px 10px}
+button{background:#1A1C22;color:var(--txt);border:1px solid var(--line);border-radius:8px;padding:6px 11px;font:inherit;font-size:13px;cursor:pointer;min-height:34px}
+button:active{background:#262A31}
+button.on{border-color:var(--gold);color:var(--gold)}
+.chips{display:flex;flex-wrap:wrap;gap:5px;margin-top:8px}
+.chips button{font-size:12.5px;padding:4px 9px;min-height:30px}
+.lab{font-size:11.5px;color:var(--sub);margin:10px 0 4px;letter-spacing:.05em}
+#stage{position:relative;margin-top:4px}
+#svg{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;overflow:visible}
+.row{display:flex;gap:8px;justify-content:center;flex-wrap:nowrap;position:relative;z-index:1}
+#syms .tile{flex:1 1 0;max-width:210px;min-width:0}
+@media (max-width:480px){.tile{font-size:18px;padding:5px 8px}.sym{font-size:13px}.tile small{font-size:9.5px}}
+.tile{border:1px solid #4A4D55;background:#1C1E24;border-radius:8px;padding:6px 12px;font-size:22px;min-width:46px;text-align:center;cursor:pointer;user-select:none}
+.tile small{display:block;font-size:10.5px;color:var(--sub);margin-top:2px}
+.sym{cursor:default;font-size:15px;padding:6px 10px;background:#15171C}
+.sym b{font-family:"JetBrains Mono",monospace;font-size:16px}
+.gap{height:46px}
+#bs{font-size:20px;text-align:center;padding:8px;border:1px dashed var(--line);border-radius:8px;margin-top:4px}
+#bs .key{font-size:12px;color:var(--sub);display:block;margin-top:4px;font-family:"Noto Serif TC",serif}
+#readings{font-size:13px;line-height:1.7}
+#readings div{padding:2px 0;border-bottom:1px dashed rgba(237,230,214,.08)}
+.ok{color:var(--true)}.ng{color:var(--false)}
+#msg{font-size:13px;line-height:1.6;margin-top:6px;color:var(--txt)}
+#msg em{color:var(--gold);font-style:normal}
+.legend{display:flex;flex-wrap:wrap;gap:4px 10px;font-size:11.5px;color:var(--sub)}
+.legend i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:4px;vertical-align:-1px}
+.bars div{display:flex;align-items:center;gap:6px;font-size:12.5px;margin:4px 0}
+.bars span.b{height:12px;border-radius:3px;display:inline-block}
+.bars em{font-style:normal;color:var(--sub);font-size:11.5px}
+</style>
+</head>
+<body>
+<header><h1>記號與符號拆解器</h1><span>同一個字（記號），在句子裡可以是完全不同的符號（3.32–3.323）</span></header>
+<div id="grid">
+  <div class="box">
+    <form id="f"><input id="inp" type="text" value="白是白的" aria-label="輸入「A是B」的句子" placeholder="輸入「A是B」，例如：晨星是昏星"><button type="submit">拆解</button></form>
+    <div class="chips" id="chips"></div>
+    <div class="lab">記號（看得見、聽得到的部分）　點一下字塊，可以改變它的用法</div>
+    <div id="stage">
+      <svg id="svg"></svg>
+      <div class="row" id="signs"></div>
+      <div class="gap"></div>
+      <div class="row" id="syms"></div>
+    </div>
+    <div class="lab">理想記號語言（概念文字）：不同的符號用不同的記號（3.325）</div>
+    <div id="bs" class="mono"></div>
+    <div id="msg"></div>
+    <div class="legend" style="margin-top:8px"><span><i style="background:var(--name)"></i>名稱</span><span><i style="background:var(--concept)"></i>概念詞（函數）</span><span><i style="background:var(--cop)"></i>繫詞</span><span><i style="background:var(--eq)"></i>等號</span><span><i style="background:var(--ex)"></i>存在</span></div>
+  </div>
+  <div class="box">
+    <div class="lab" style="margin-top:0">全部讀法（列舉每個記號的每種可能用法）</div>
+    <div id="readings"></div>
+    <div class="lab">九句範例的統計（程式逐句拆解）</div>
+    <div class="bars" id="bars"></div>
+    <div class="lab">德文與英文</div>
+    <div style="font-size:12.5px;line-height:1.6;color:var(--sub)" id="de"></div>
+  </div>
+</div>
+<script>
+(() => {
+"use strict";
+const $ = id => document.getElementById(id);
+// 詞庫：記號 → 可能的符號 [{k:種類, s:概念文字寫法, g:說明}]
+const LEX = {
+  "白": [{ k: "名稱", s: "b", g: "人名：一位姓白的人" }, { k: "概念", s: "W(x)", g: "形容詞：白色的" }],
+  "白的": [{ k: "概念", s: "W(x)", g: "形容詞：白色的" }],
+  "金星": [{ k: "名稱", s: "v", g: "專名：那顆行星" }], "晨星": [{ k: "名稱", s: "m", g: "清晨看到的那顆亮星" }], "昏星": [{ k: "名稱", s: "e", g: "黃昏看到的那顆亮星" }],
+  "維根斯坦": [{ k: "名稱", s: "w", g: "人名" }], "羅素": [{ k: "名稱", s: "r", g: "人名" }],
+  "哲學家": [{ k: "概念", s: "Ph(x)", g: "類名：x 是哲學家" }], "英國人": [{ k: "概念", s: "E(x)", g: "類名：x 是英國人" }],
+  "台北101": [{ k: "名稱", s: "t", g: "專名" }], "台灣最高的大樓": [{ k: "名稱", s: "h", g: "確定描述：唯一的那一棟" }],
+  "上帝": [{ k: "名稱", s: "g", g: "專名" }], "獨角獸": [{ k: "概念", s: "U(x)", g: "類名：x 是獨角獸" }],
+  "存在的": [{ k: "存在", s: "∃", g: "存在的表達" }], "存在": [{ k: "存在", s: "∃", g: "存在的表達" }],
+  "2+2": [{ k: "名稱", s: "2+2", g: "數的描述" }], "4": [{ k: "名稱", s: "4", g: "數字" }]
+};
+const IS = [{ k: "繫詞", g: "把概念加到對象上" }, { k: "等號", g: "兩個名稱指同一個對象" }, { k: "存在", g: "說有這樣的東西" }];
+const COLOR = { 名稱: "var(--name)", 概念: "var(--concept)", 繫詞: "var(--cop)", 等號: "var(--eq)", 存在: "var(--ex)" };
+const NEED = { 名稱: "等號", 概念: "繫詞", 存在: "存在" };
+const PRESETS = ["白是白的", "金星是晨星", "晨星是昏星", "維根斯坦是哲學家", "台北101是台灣最高的大樓", "上帝是存在的", "2+2是4", "羅素是英國人", "獨角獸是存在的"];
+const EXTRA = ["白是白", "小明是班長"];
+const DE = {
+  "白是白的": "原文例句是 Grün ist grün（Grün 也是德語姓氏）。",
+  "金星是晨星": "Venus ist der Morgenstern.", "晨星是昏星": "Der Morgenstern ist der Abendstern.（弗雷格著名的例子）",
+  "維根斯坦是哲學家": "Wittgenstein ist ein Philosoph.", "上帝是存在的": "Gott ist.（德文可以只說「上帝是」，意思是上帝存在）",
+  "羅素是英國人": "Russell ist Engländer.", "2+2是4": "2+2 ist 4.", "獨角獸是存在的": "中文較自然的說法是「有獨角獸」：存在用「有」，不用「是」。"
+};
+let user = {};   // 使用者點字塊指定的用法：記號 → 種類
+
+function guess(w, side) {
+  if (LEX[w]) return LEX[w];
+  if (w === "") return [{ k: "存在", s: "∃", g: "「A 是」：只說它存在" }];
+  if (/最|那個|唯一/.test(w) || (/的/.test(w) && !/的$/.test(w))) return [{ k: "名稱", s: abbrev(w, "名稱"), g: "確定描述（當名稱用）" }];
+  if (/的$/.test(w)) return [{ k: "概念", s: abbrev(w, "概念"), g: "形容詞" }];
+  if (side === "A") return [{ k: "名稱", s: abbrev(w, "名稱"), g: "推測為名稱" }, { k: "概念", s: abbrev(w, "概念"), g: "推測為類名" }];
+  return [{ k: "名稱", s: abbrev(w, "名稱"), g: "推測為名稱" }, { k: "概念", s: abbrev(w, "概念"), g: "推測為類名" }];
+}
+let letters = {};
+function abbrev(w, k) {
+  const key = w + k; if (letters[key]) return letters[key];
+  const pool = k === "名稱" ? "abcdnpq" : "FGHK", used = new Set(Object.values(letters));
+  const ch = [...pool].find(c => !used.has(k === "名稱" ? c : c + "(x)")) || "a";
+  return letters[key] = k === "名稱" ? ch : ch + "(x)";
+}
+function options(w, side) {
+  const all = guess(w, side);
+  if (user[w]) { const f = all.filter(o => o.k === user[w]); if (f.length) return f; }
+  return all;
+}
+function parse(sent) {
+  const s = sent.replace(/[\s，。！？「」『』、.!?]/g, "");
+  const i = s.indexOf("是"); if (i <= 0) return null;
+  return { A: s.slice(0, i), B: s.slice(i + 1) };
+}
+function valid(ra, ris, rb) {
+  if (rb.k === "存在") return ris.k === "存在" && (ra.k === "名稱" || ra.k === "概念");
+  return ra.k === "名稱" && ris.k === NEED[rb.k];
+}
+function enumerate(A, B) {
+  const oa = options(A, "A"), ob = options(B, "B"), out = [];
+  for (const ra of oa) for (const ris of IS) for (const rb of ob) out.push({ ra, ris, rb, ok: valid(ra, ris, rb) });
+  return out;
+}
+function notation(r) {
+  const { ra, ris, rb } = r;
+  if (ris.k === "存在") return ra.k === "名稱" ? `∃x (x = ${ra.s})` : `∃x ${ra.s.replace("(x)", "")}(x)`;
+  if (ris.k === "等號") return `${ra.s} = ${rb.s}`;
+  return rb.s.replace("(x)", "") + `(${ra.s})`;
+}
+const esc = s => s.replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+
+let cur = null;
+function run(sent) {
+  const p = parse(sent);
+  if (!p) { $("signs").innerHTML = ""; $("syms").innerHTML = ""; $("svg").innerHTML = ""; $("bs").textContent = "—"; $("readings").innerHTML = ""; $("msg").innerHTML = "請輸入含有「是」的句子，例如「晨星是昏星」。"; return; }
+  const rs = enumerate(p.A, p.B), good = rs.filter(r => r.ok);
+  cur = { p, rs, good, sent };
+  // 記號層
+  const toks = [{ w: p.A, role: "A" }, { w: "是", role: "IS" }, ...(p.B ? [{ w: p.B, role: "B" }] : [])];
+  $("signs").innerHTML = toks.map((t, i) => `<div class="tile" data-i="${i}" data-w="${esc(t.w)}" data-role="${t.role}" title="點一下改變用法">${esc(t.w)}<small>記號</small></div>`).join("");
+  // 符號層：採第一個合法讀法
+  const r = good[0];
+  if (r) {
+    const parts = [{ c: r.ra.k, s: r.ra.s, g: r.ra.g }, { c: r.ris.k, s: r.ris.k === "繫詞" ? "( )" : r.ris.k === "等號" ? "=" : "∃", g: r.ris.g }];
+    if (p.B) parts.push(r.ris.k === "存在" ? { c: "存在", s: "—", g: "併入 ∃，不是對象的性質" } : { c: r.rb.k, s: r.rb.s, g: r.rb.g });
+    $("syms").innerHTML = parts.map((q, i) => `<div class="tile sym" data-i="${i}" style="border-color:${COLOR[q.c]};color:${COLOR[q.c]}"><b>${esc(q.s)}</b><small>${q.c}｜${esc(q.g)}</small></div>`).join("");
+    $("bs").innerHTML = good.map(notation).map(esc).join("　或　") + `<span class="key">${good.length > 1 ? "仍有歧義：要從有意義的用法中認出符號（3.326），點上方字塊指定用法" : "一個符號一個記號，歧義消失"}</span>`;
+  } else {
+    $("syms").innerHTML = ""; $("bs").innerHTML = `<span class="ng">沒有合乎邏輯語法的讀法</span><span class="key">例如名稱不能接在「是」後面當形容詞用；試著點字塊改用法</span>`;
+  }
+  // 讀法列表
+  $("readings").innerHTML = `<div>「${esc(p.A)}」${options(p.A, "A").length} 種 ×「是」3 種 × 「${esc(p.B || "（空）")}」${p.B ? options(p.B, "B").length : 1} 種 ＝ <b class="mono">${rs.length}</b> 種讀法，合乎邏輯語法的 <b class="mono ok">${good.length}</b> 種</div>` +
+    rs.map(x => `<div class="${x.ok ? "ok" : "ng"}">${x.ok ? "✓" : "✗"} ${x.ra.k}・${x.ris.k}・${x.rb.k}${x.ok ? "　→ <span class='mono'>" + esc(notation(x)) + "</span>" : "　" + why(x)}</div>`).join("");
+  // 訊息
+  const same = p.B && (p.B === p.A || p.B.replace(/的$/, "") === p.A);
+  let m = "";
+  if (r) {
+    const use = r.ris.k;
+    m = `這句的「是」是 <em>${use}</em>：${use === "繫詞" ? "把一個概念加到對象上，寫成 F(a)，「是」本身在概念文字裡消失了。" : use === "等號" ? "說兩個名稱指同一個對象，寫成 a = b。兩邊互換也成立。" : "說有這樣的東西，寫成 ∃x。在日常語言裡「存在」被當成像「走」一樣的動詞（3.323），但它不是對象的一種性質。"}`;
+    if (same && r.ra.k !== r.rb.k) m += `<br>同一個記號「${esc(p.A)}」出現兩次，卻分屬<em>兩個不同的符號</em>（${r.ra.k}、${r.rb.k}）：不只是指稱不同，而是用法的種類不同（3.323）。`;
+  }
+  $("msg").innerHTML = m;
+  $("de").textContent = DE[sent.replace(/[\s。]/g, "")] || "德文的 ist、英文的 is 同時擔任繫詞、等號與存在三種角色；中文多半把「存在」交給「有」。記號是任意的（3.322），符號才是重點。";
+  document.querySelectorAll("#chips button").forEach(b => b.classList.toggle("on", b.textContent === sent));
+  bindTiles(); requestAnimationFrame(drawLines);
+}
+function why(x) {
+  if (x.rb.k === "存在") return x.ris.k !== "存在" ? "（後面是「存在」，「是」只能表存在）" : "（存在的主詞要是名稱或概念）";
+  if (x.ra.k !== "名稱") return "（概念詞不能單獨當主詞）";
+  return `（${x.rb.k}在「是」後面，「是」必須當${NEED[x.rb.k]}）`;
+}
+function bindTiles() {
+  document.querySelectorAll("#signs .tile").forEach(t => t.onclick = () => {
+    const w = t.dataset.w, role = t.dataset.role; if (role === "IS") { flash(t); return; }
+    const kinds = [...new Set(guess(w, role).map(o => o.k))];
+    if (kinds.length < 2) { flash(t); return; }
+    const now = user[w] ? kinds.indexOf(user[w]) : -1;
+    user[w] = kinds[(now + 1) % kinds.length]; run(cur.sent);
+  });
+}
+function flash(t) { t.style.borderColor = "var(--gold)"; setTimeout(() => t.style.borderColor = "", 300); }
+function drawLines() {
+  const svg = $("svg"), st = $("stage").getBoundingClientRect();
+  const S = [...document.querySelectorAll("#signs .tile")], Y = [...document.querySelectorAll("#syms .tile")];
+  let h = "";
+  Y.forEach((y, i) => {
+    const a = S[i]?.getBoundingClientRect(), b = y.getBoundingClientRect(); if (!a) return;
+    const x1 = a.left + a.width / 2 - st.left, y1 = a.bottom - st.top, x2 = b.left + b.width / 2 - st.left, y2 = b.top - st.top;
+    h += `<path d="M${x1},${y1} C${x1},${(y1 + y2) / 2} ${x2},${(y1 + y2) / 2} ${x2},${y2}" stroke="${getComputedStyle(y).color}" stroke-width="1.6" fill="none" stroke-dasharray="4 4"/>`;
+  });
+  svg.innerHTML = h;
+}
+new ResizeObserver(() => drawLines()).observe(document.body);
+
+// 九句範例的統計：逐句跑同一套拆解
+function stats() {
+  const saved = user; user = {};
+  const cnt = { 繫詞: 0, 等號: 0, 存在: 0 };
+  for (const s of PRESETS) { const p = parse(s), g = enumerate(p.A, p.B).filter(r => r.ok); if (g.length === 1) cnt[g[0].ris.k]++; }
+  user = saved;
+  const mx = Math.max(...Object.values(cnt));
+  $("bars").innerHTML = Object.entries(cnt).map(([k, v]) => `<div><span style="width:3em">${k}</span><span class="b" style="width:${v / mx * 60}%;background:${COLOR[k]}"></span><b class="mono">${v}</b></div>`).join("") + `<em>同一個「是」，在九句裡分屬三個不同的符號。</em>`;
+}
+
+$("chips").innerHTML = [...PRESETS, ...EXTRA].map(s => `<button type="button">${s}</button>`).join("");
+document.querySelectorAll("#chips button").forEach(b => b.onclick = () => { user = {}; $("inp").value = b.textContent; run(b.textContent); });
+$("f").onsubmit = e => { e.preventDefault(); user = {}; run($("inp").value.trim()); };
+stats(); run("白是白的");
+})();
+</script>
+</body>
+</html>

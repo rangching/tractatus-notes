@@ -1,0 +1,267 @@
+<!doctype html>
+<html lang="zh-Hant-TW">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>描述之網</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@400;600&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#0E0F12;--panel:#15171C;--line:#2A2D35;--txt:#EDE6D6;--sub:#9A9384;--gold:#D4A84B;--blue:#6FA3D8;--teal:#5FB8A6;--rust:#C9644A;--m6:#B98AC2}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;background:var(--bg);color:var(--txt);font-family:"Noto Serif TC","PingFang TC",serif;overflow:hidden;-webkit-tap-highlight-color:transparent}
+body{background-image:linear-gradient(rgba(237,230,214,.035) 1px,transparent 1px),linear-gradient(90deg,rgba(237,230,214,.035) 1px,transparent 1px);background-size:22px 22px}
+.num{font-family:"JetBrains Mono",ui-monospace,Menlo,monospace}
+#app{position:absolute;inset:0;display:grid;gap:8px;padding:8px;grid-template-columns:minmax(0,1fr) minmax(260px,.9fr);grid-template-rows:auto minmax(0,1fr) auto;grid-template-areas:"head head" "stage side" "ctrl ctrl"}
+#app.portrait{position:relative;inset:auto;min-height:100%;grid-template-columns:1fr;grid-template-rows:auto min(94vw,460px) auto auto;grid-template-areas:"head" "stage" "ctrl" "side"}
+@media (orientation:portrait),(max-width:640px){html,body{overflow-x:hidden;overflow-y:auto;height:auto;min-height:100%}}
+header{grid-area:head;display:flex;align-items:baseline;gap:10px;min-width:0}
+header h1{font-size:15px;font-weight:600;white-space:nowrap}
+header span{font-size:12px;color:var(--sub);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.box{background:rgba(21,23,28,.92);border:1px solid var(--line);border-radius:10px;position:relative;min-height:0;min-width:0;overflow:hidden}
+#stage{grid-area:stage}
+canvas{display:block;width:100%;height:100%;touch-action:none}
+.tag{position:absolute;right:10px;bottom:6px;font-size:10px;color:var(--sub);pointer-events:none}
+#side{grid-area:side;display:flex;flex-direction:column;gap:8px;background:none;border:none;overflow:auto}
+#read{display:grid;grid-template-columns:repeat(2,1fr);gap:6px 10px;padding:8px 10px;font-size:12px}
+#read div{display:flex;flex-direction:column;gap:2px;min-width:0}
+#read b{font-size:16px;font-weight:600}
+#read small{color:var(--sub)}
+#read .wide{grid-column:1/-1}
+#read .wide b{font-size:12.5px;font-weight:400;line-height:1.55}
+#scan{padding:8px 10px;font-size:12px}
+#scan p{color:var(--sub);line-height:1.5;margin-bottom:6px}
+table{width:100%;border-collapse:collapse;font-size:12px;margin-top:6px}
+th,td{padding:4px 4px;border-bottom:1px solid var(--line);text-align:right;white-space:nowrap}
+th:first-child,td:first-child{text-align:left}
+th{color:var(--sub);font-weight:400}
+tr.best td{color:var(--gold)}
+#ctrl{grid-area:ctrl;display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;padding:8px 10px}
+.seg{display:flex;gap:0}
+.seg button{border-radius:0}
+.seg button:first-child{border-radius:8px 0 0 8px}
+.seg button:last-child{border-radius:0 8px 8px 0}
+.seg button+button{border-left:none}
+button{background:#1C1F26;color:var(--txt);border:1px solid var(--line);border-radius:8px;padding:6px 11px;font:inherit;font-size:13px;cursor:pointer;min-height:34px}
+button:active{background:#262A33}
+button.on{border-color:var(--gold);color:var(--gold)}
+.seg button.on{background:#262218}
+label{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--sub);flex:1 1 200px;min-width:170px}
+label output{color:var(--txt);min-width:40px;text-align:right}
+input[type=range]{flex:1;accent-color:var(--gold);height:28px;min-width:80px}
+#app.portrait #read b{font-size:14px}
+#app.portrait button{min-height:30px;padding:4px 9px;font-size:12px}
+#app.portrait label{flex-basis:100%}
+#app.portrait #side{overflow:visible}
+</style>
+</head>
+<body>
+<div id="app">
+  <header><h1>描述之網</h1><span>6.341：用一張網覆蓋白紙上的黑斑，逐格說「黑」或「白」</span></header>
+  <div id="stage" class="box"><canvas id="cv"></canvas><span class="tag" id="seedTag">種子 6341・真實計算</span></div>
+  <div id="side" class="box">
+    <div id="read" class="box">
+      <div><small>描述長度（格數＝位元）</small><b class="num" id="rCells">—</b></div>
+      <div><small>誤差（判錯的面積）</small><b class="num" id="rErr" style="color:var(--rust)">—</b></div>
+      <div><small>覆蓋黑斑所需格數</small><b class="num" id="rCover">—</b></div>
+      <div><small>報「黑」的格數</small><b class="num" id="rBlack">—</b></div>
+      <div class="wide"><small id="rCellH">點畫面上任一格</small><b id="rCell">看那一格有多少黑像素、被報成黑還是白。</b></div>
+    </div>
+    <div id="scan" class="box">
+      <p>6.341：「用較粗的三角網，可能比用較細的方格網描述得更精確。」讓程式替三種網各找出：誤差不超過目標時，最粗（描述最短）的那一張。</p>
+      <label style="min-width:0">誤差目標 <input id="sTarget" type="range" min="1" max="10" step="0.5" value="2"><output class="num" id="oTarget">2%</output></label>
+      <button id="bScan" style="margin-top:6px;width:100%">三種網各找最粗的一張</button>
+      <table id="tScan"><thead><tr><th>網</th><th>等效邊長</th><th>描述長度</th><th>誤差</th></tr></thead><tbody><tr><td colspan="4" style="text-align:left;color:var(--sub)">還沒掃描</td></tr></tbody></table>
+    </div>
+  </div>
+  <div id="ctrl" class="box">
+    <div class="seg" id="gShape"><button data-v="square" class="on">方格網</button><button data-v="tri">三角網</button><button data-v="hex">六角網</button></div>
+    <div class="seg" id="gView"><button data-v="orig" class="on">原圖＋網</button><button data-v="desc">網的描述</button><button data-v="err">誤差</button></div>
+    <label>等效邊長 <input id="sSize" type="range" min="2" max="40" step="1" value="12"><output class="num" id="oSize">12</output></label>
+    <button id="bSeed">換一張圖</button>
+  </div>
+</div>
+<script>
+(() => {
+"use strict";
+// ================= CORE（與 _units/calc_u11.py 逐行對應，勿只改一邊） =================
+const W = 240, H = 240, SQ3 = Math.sqrt(3);
+function mulberry32(a) {
+  return function () {
+    a |= 0; a = a + 0x6D2B79F5 | 0;
+    let t = Math.imul(a ^ a >>> 15, 1 | a);
+    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  };
+}
+function makeImage(seed = 6341) {
+  const rnd = mulberry32(seed), ells = [];
+  for (let c = 0; c < 7; c++) {
+    const cx = 30 + 180 * rnd(), cy = 30 + 180 * rnd(), m = 3 + Math.floor(rnd() * 3);
+    for (let e = 0; e < m; e++) {
+      const ex = cx + (rnd() - 0.5) * 40, ey = cy + (rnd() - 0.5) * 40, rx = 8 + 18 * rnd(), ry = 6 + 14 * rnd();
+      let u = rnd() * 2 - 1, v = rnd() * 2 - 1, n = Math.sqrt(u * u + v * v);
+      if (n < 1e-6) { u = 1; v = 0; n = 1; }
+      ells.push([ex, ey, rx, ry, u / n, v / n]);
+    }
+  }
+  const img = new Uint8Array(W * H);
+  for (let j = 0; j < H; j++) {
+    const y = j + 0.5;
+    for (let i = 0; i < W; i++) {
+      const x = i + 0.5;
+      for (const [ex, ey, rx, ry, c, s] of ells) {
+        const dx = x - ex, dy = y - ey, a = (dx * c + dy * s) / rx, b = (-dx * s + dy * c) / ry;
+        if (a * a + b * b <= 1) { img[j * W + i] = 1; break; }
+      }
+    }
+  }
+  return img;
+}
+const key = (a, b) => (a + 2000) * 8192 + (b + 2000);
+function cellOf(shape, A) {
+  if (shape === "square") { const s = Math.sqrt(A); return (x, y) => key(Math.floor(x / s), Math.floor(y / s)); }
+  if (shape === "tri") {
+    const a = Math.sqrt(4 * A / SQ3), th = a * SQ3 / 2;
+    return (x, y) => {
+      const r = Math.floor(y / th), X = x - (r % 2 ? a / 2 : 0), fx = X / a, k = Math.floor(fx), fr = fx - k, yy = (y - r * th) / th;
+      if (fr < 0.5 - yy / 2) return key(r, 2 * (k - 1) + 1);
+      if (fr > 0.5 + yy / 2) return key(r, 2 * k + 1);
+      return key(r, 2 * k);
+    };
+  }
+  const h = Math.sqrt(2 * A / (3 * SQ3));
+  return (x, y) => {
+    const q = (SQ3 / 3 * x - y / 3) / h, r = (2 / 3 * y) / h;
+    const cx = q, cz = r, cy = -cx - cz;
+    let rx = Math.floor(cx + 0.5), ry = Math.floor(cy + 0.5), rz = Math.floor(cz + 0.5);
+    const dx = Math.abs(rx - cx), dy = Math.abs(ry - cy), dz = Math.abs(rz - cz);
+    if (dx > dy && dx > dz) rx = -ry - rz; else if (dy > dz) ry = -rx - rz; else rz = -rx - ry;
+    return key(rx, rz);
+  };
+}
+// 回傳統計，以及每個像素所屬格子的序號（給繪圖用）
+function describe(img, shape, A) {
+  const f = cellOf(shape, A), idx = new Map(), keys = [], tot = [], blk = [], pix = new Int32Array(W * H);
+  for (let j = 0; j < H; j++) {
+    const y = j + 0.5;
+    for (let i = 0; i < W; i++) {
+      const k = f(i + 0.5, y); let c = idx.get(k);
+      if (c === undefined) { c = keys.length; idx.set(k, c); keys.push(k); tot.push(0); blk.push(0); }
+      tot[c]++; if (img[j * W + i]) blk[c]++; pix[j * W + i] = c;
+    }
+  }
+  let err = 0, nblack = 0, cover = 0; const dec = new Uint8Array(keys.length);
+  for (let c = 0; c < keys.length; c++) {
+    if (blk[c]) cover++;
+    if (2 * blk[c] >= tot[c]) { nblack++; err += tot[c] - blk[c]; dec[c] = 1; } else err += blk[c];
+  }
+  return { cells: keys.length, cover, black: nblack, err: err / (W * H), keys, tot, blk, dec, pix };
+}
+const sizeList = () => { const o = []; for (let s = 40; s >= 2; s--) o.push(s * s); return o; };
+function coarsest(img, shape, target) {
+  for (const A of sizeList()) { const d = describe(img, shape, A); if (d.err <= target) return [A, d]; }
+  return [null, null];
+}
+// ================= /CORE =================
+if (typeof document === "undefined") { module.exports = { makeImage, describe, coarsest }; return; }
+
+const $ = id => document.getElementById(id);
+const C = { paper: [233, 225, 207], ink: [26, 27, 31], rust: [201, 100, 74], gold: "#D4A84B", blue: "#6FA3D8", sub: "#9A9384" };
+let seed = 6341, img = makeImage(seed), shape = "square", mode = "orig", size = 12, D = null, picked = -1;
+const cv = $("cv"), ctx = cv.getContext("2d"), app = $("app");
+const off = document.createElement("canvas"); off.width = W; off.height = H; const octx = off.getContext("2d"), idata = octx.createImageData(W, H);
+let CW = 0, CH = 0, SC = 1, X0 = 0, Y0 = 0;
+function fit() {
+  const r = cv.getBoundingClientRect(), dpr = Math.min(window.devicePixelRatio || 1, 2);
+  cv.width = Math.max(1, Math.round(r.width * dpr)); cv.height = Math.max(1, Math.round(r.height * dpr));
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0); CW = r.width; CH = r.height;
+}
+function layout() { app.classList.toggle("portrait", window.innerHeight > window.innerWidth * 1.05 || window.innerWidth < 640); fit(); draw(); }
+new ResizeObserver(layout).observe(document.body);
+
+function update() {
+  D = describe(img, shape, size * size); picked = -1;
+  $("rCells").textContent = D.cells.toLocaleString() + " 位元";
+  $("rErr").textContent = (D.err * 100).toFixed(2) + "%";
+  $("rCover").textContent = D.cover.toLocaleString() + " 格";
+  $("rBlack").textContent = D.black.toLocaleString() + " 格";
+  $("rCellH").textContent = "點畫面上任一格";
+  $("rCell").textContent = `原圖有 ${(W * H).toLocaleString()} 個像素；這張網只用 ${D.cells.toLocaleString()} 個「黑／白」就描述完，壓縮成 ${(D.cells / (W * H) * 100).toFixed(2)}%。`;
+  draw();
+}
+function paint() {
+  const d = idata.data;
+  for (let p = 0; p < W * H; p++) {
+    const b = img[p], rep = D.dec[D.pix[p]];
+    let c;
+    if (mode === "orig") c = b ? C.ink : C.paper;
+    else if (mode === "desc") c = rep ? C.ink : C.paper;
+    else c = b !== rep ? C.rust : (b ? [70, 70, 76] : [60, 58, 54]);
+    if (picked >= 0 && D.pix[p] === picked) c = [Math.min(255, c[0] * .6 + 212 * .4), Math.min(255, c[1] * .6 + 168 * .4), Math.min(255, c[2] * .6 + 75 * .4)];
+    d[p * 4] = c[0]; d[p * 4 + 1] = c[1]; d[p * 4 + 2] = c[2]; d[p * 4 + 3] = 255;
+  }
+  octx.putImageData(idata, 0, 0);
+}
+function poly(k) {
+  const a = Math.floor(k / 8192) - 2000, b = k % 8192 - 2000, A = size * size;
+  if (shape === "square") { const s = size; return [[a * s, b * s], [(a + 1) * s, b * s], [(a + 1) * s, (b + 1) * s], [a * s, (b + 1) * s]]; }
+  if (shape === "tri") {
+    const L = Math.sqrt(4 * A / SQ3), th = L * SQ3 / 2, r = a, off2 = r % 2 ? L / 2 : 0;
+    if (b % 2 === 0) { const k2 = b / 2; return [[off2 + k2 * L, (r + 1) * th], [off2 + (k2 + 1) * L, (r + 1) * th], [off2 + k2 * L + L / 2, r * th]]; }
+    const k2 = (b - 1) / 2; return [[off2 + k2 * L + L / 2, r * th], [off2 + (k2 + 1) * L + L / 2, r * th], [off2 + (k2 + 1) * L, (r + 1) * th]];
+  }
+  const h = Math.sqrt(2 * A / (3 * SQ3)), cx = h * SQ3 * (a + b / 2), cy = h * 1.5 * b, o = [];
+  for (let i = 0; i < 6; i++) { const t = (60 * i - 30) * Math.PI / 180; o.push([cx + h * Math.cos(t), cy + h * Math.sin(t)]); }
+  return o;
+}
+function draw() {
+  if (!CW || !D) return;
+  ctx.clearRect(0, 0, CW, CH);
+  SC = Math.min(CW - 16, CH - 16) / W; X0 = (CW - W * SC) / 2; Y0 = (CH - H * SC) / 2;
+  paint();
+  ctx.imageSmoothingEnabled = false; ctx.drawImage(off, X0, Y0, W * SC, H * SC);
+  // 網線
+  if (size * SC >= 5) {
+    ctx.save(); ctx.beginPath(); ctx.rect(X0, Y0, W * SC, H * SC); ctx.clip();
+    ctx.strokeStyle = mode === "err" ? "rgba(111,163,216,.45)" : "rgba(111,163,216,.75)"; ctx.lineWidth = Math.max(.6, Math.min(1.2, size * SC / 14));
+    ctx.beginPath();
+    for (const k of D.keys) { const p = poly(k); ctx.moveTo(X0 + p[0][0] * SC, Y0 + p[0][1] * SC); for (let i = 1; i < p.length; i++) ctx.lineTo(X0 + p[i][0] * SC, Y0 + p[i][1] * SC); ctx.closePath(); }
+    ctx.stroke(); ctx.restore();
+  }
+  if (picked >= 0) {
+    const p = poly(D.keys[picked]); ctx.strokeStyle = C.gold; ctx.lineWidth = 2; ctx.beginPath();
+    ctx.moveTo(X0 + p[0][0] * SC, Y0 + p[0][1] * SC); for (let i = 1; i < p.length; i++) ctx.lineTo(X0 + p[i][0] * SC, Y0 + p[i][1] * SC); ctx.closePath(); ctx.stroke();
+  }
+  ctx.strokeStyle = "#2A2D35"; ctx.lineWidth = 1; ctx.strokeRect(X0 - .5, Y0 - .5, W * SC + 1, H * SC + 1);
+}
+cv.addEventListener("pointerdown", e => {
+  const r = cv.getBoundingClientRect(), x = (e.clientX - r.left - X0) / SC, y = (e.clientY - r.top - Y0) / SC;
+  if (x < 0 || y < 0 || x >= W || y >= H) return;
+  picked = D.pix[Math.floor(y) * W + Math.floor(x)];
+  const t = D.tot[picked], b = D.blk[picked], rep = D.dec[picked];
+  $("rCellH").textContent = "你點的這一格";
+  $("rCell").textContent = `這格蓋住 ${t} 個像素，其中黑 ${b} 個（${(b / t * 100).toFixed(0)}%）→ 整格報「${rep ? "黑" : "白"}」，因此判錯 ${rep ? t - b : b} 個像素。` + (t < size * size * .9 ? "（這格被圖的邊緣切掉一部分）" : "");
+  draw();
+});
+function seg(id, cb) { $(id).querySelectorAll("button").forEach(b => b.onclick = () => { $(id).querySelectorAll("button").forEach(x => x.classList.toggle("on", x === b)); cb(b.dataset.v); }); }
+seg("gShape", v => { shape = v; update(); });
+seg("gView", v => { mode = v; draw(); });
+$("sSize").oninput = e => { size = +e.target.value; $("oSize").textContent = size; update(); };
+$("sTarget").oninput = e => { $("oTarget").textContent = e.target.value + "%"; };
+const NAME = { square: "方格", tri: "三角", hex: "六角" };
+$("bScan").onclick = () => {
+  const target = +$("sTarget").value / 100, rows = [];
+  for (const s of ["square", "tri", "hex"]) { const [A, d] = coarsest(img, s, target); rows.push({ s, A, d }); }
+  const ok = rows.filter(r => r.d), best = ok.length ? Math.min(...ok.map(r => r.d.cells)) : -1;
+  $("tScan").querySelector("tbody").innerHTML = rows.map(r => r.d
+    ? `<tr class="${r.d.cells === best ? "best" : ""}"><td>${NAME[r.s]}網</td><td class="num">${Math.round(Math.sqrt(r.A))}</td><td class="num">${r.d.cells.toLocaleString()}</td><td class="num">${(r.d.err * 100).toFixed(2)}%</td></tr>`
+    : `<tr><td>${NAME[r.s]}網</td><td colspan="3">邊長 2 也達不到</td></tr>`).join("");
+};
+$("bSeed").onclick = () => { seed = seed === 6341 ? 1 : seed + 1; if (seed > 9) seed = 6341; img = makeImage(seed); $("seedTag").textContent = "種子 " + seed + (seed === 6341 ? "（練習題用這張）" : "") + "・真實計算"; $("tScan").querySelector("tbody").innerHTML = `<tr><td colspan="4" style="text-align:left;color:var(--sub)">換了圖，請重新掃描</td></tr>`; update(); };
+update(); layout();
+})();
+</script>
+</body>
+</html>

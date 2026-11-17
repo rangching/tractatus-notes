@@ -1,0 +1,316 @@
+<!doctype html>
+<html lang="zh-Hant-TW">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>命題樹探索器</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@400;600&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#0E0F12;--panel:rgba(20,22,27,.92);--line:#2A2D35;--txt:#EDE6D6;--sub:#9A9384;--gold:#D4A84B;--blue:#6FA3D8;--teal:#5FB8A6;--rust:#C9644A}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;overflow:hidden;color:var(--txt);font-family:"Noto Serif TC","PingFang TC",serif;-webkit-tap-highlight-color:transparent;
+  background-color:var(--bg);
+  background-image:linear-gradient(rgba(237,230,214,.035) 1px,transparent 1px),linear-gradient(90deg,rgba(237,230,214,.035) 1px,transparent 1px);
+  background-size:24px 24px}
+.mono{font-family:"JetBrains Mono",ui-monospace,Menlo,monospace}
+#app{position:absolute;inset:0;display:grid;gap:8px;padding:8px;grid-template-columns:minmax(0,1.35fr) minmax(0,1fr);grid-template-rows:auto minmax(0,1fr) auto;grid-template-areas:"head head" "stage side" "ctrl ctrl"}
+#app.portrait{grid-template-columns:minmax(0,1fr);grid-template-rows:auto minmax(0,1.15fr) minmax(0,1fr) auto;grid-template-areas:"head" "stage" "side" "ctrl"}
+header{grid-area:head;display:flex;align-items:center;gap:10px;min-width:0}
+header h1{font-size:15px;font-weight:600;white-space:nowrap}
+header span{font-size:12px;color:var(--sub);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1;min-width:0}
+#find{display:flex;gap:4px;flex:0 0 auto}
+#find input{width:92px;background:#16181D;color:var(--txt);border:1px solid var(--line);border-radius:8px;padding:5px 8px;font:13px "JetBrains Mono",monospace;min-height:32px}
+.box{background:var(--panel);border:1px solid var(--line);border-radius:10px;position:relative;min-height:0;min-width:0;overflow:hidden}
+#stage{grid-area:stage}
+canvas{display:block;width:100%;height:100%;touch-action:none;cursor:grab}
+#side{grid-area:side;display:flex;flex-direction:column}
+#info{flex:1;overflow-y:auto;padding:10px 12px;font-size:13px;line-height:1.7}
+#info h2{font-family:"JetBrains Mono",monospace;font-size:20px;font-weight:600;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+#info h2 small{font-family:"Noto Serif TC",serif;font-size:11px;font-weight:400;color:var(--sub)}
+.dot{display:inline-block;width:10px;height:10px;border-radius:50%}
+.crumb{margin:4px 0 8px;font-size:12px;color:var(--sub);display:flex;flex-wrap:wrap;gap:2px 4px;align-items:center}
+.chip{font-family:"JetBrains Mono",monospace;font-size:12px;background:#1B1E24;border:1px solid var(--line);color:var(--txt);border-radius:6px;padding:1px 6px;cursor:pointer;min-height:24px}
+.chip:hover{border-color:var(--gold);color:var(--gold)}
+.lang{margin:6px 0;padding-left:8px;border-left:2px solid var(--line)}
+.lang b{display:block;font-size:10px;letter-spacing:.08em;color:var(--sub);font-weight:400}
+.lang.zh{border-color:var(--gold)}.lang.de{border-color:var(--blue)}.lang.en{border-color:var(--teal)}
+.lang p{white-space:pre-line}
+.kids{display:flex;flex-wrap:wrap;gap:4px;margin-top:4px}
+#stats{display:grid;grid-template-columns:repeat(4,1fr);gap:4px;padding:6px 10px;border-top:1px solid var(--line);font-size:11px;color:var(--sub)}
+#stats div{display:flex;flex-direction:column}
+#stats b{font-family:"JetBrains Mono",monospace;font-size:15px;color:var(--txt);font-weight:600}
+#ctrl{grid-area:ctrl;display:flex;flex-wrap:wrap;align-items:center;gap:6px 14px;padding:6px 10px}
+label{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--sub)}
+label.grow{flex:1 1 200px;min-width:170px}
+input[type=range]{flex:1;accent-color:var(--gold);height:28px;min-width:80px}
+output{font-family:"JetBrains Mono",monospace;color:var(--txt);min-width:22px}
+select,button{background:#1B1E24;color:var(--txt);border:1px solid var(--line);border-radius:8px;padding:5px 10px;font:inherit;font-size:13px;min-height:32px;cursor:pointer}
+button:active{background:#262A31}
+#legend{position:absolute;left:8px;top:6px;font-size:11px;color:var(--sub);pointer-events:none;line-height:1.6;max-width:60%}
+#legend i{display:inline-block;width:8px;height:8px;border-radius:50%;margin:0 3px 0 6px;vertical-align:middle}
+#tip{position:absolute;pointer-events:none;background:rgba(14,15,18,.95);border:1px solid var(--line);border-radius:6px;padding:4px 8px;font-size:12px;max-width:260px;display:none;line-height:1.5}
+.tag{position:absolute;right:8px;bottom:5px;font-size:10px;color:var(--sub);pointer-events:none}
+#app.portrait header span{display:none}
+#app.portrait #stats{grid-template-columns:repeat(4,1fr);padding:4px 8px}
+#app.portrait #stats b{font-size:13px}
+#app.portrait #info{padding:8px 10px;font-size:12.5px}
+#app.portrait #info h2{font-size:17px}
+#app.portrait #ctrl{gap:4px 10px;padding:5px 8px}
+#app.portrait #legend{font-size:10px;max-width:96%}
+#app.portrait label.grow{flex:1 1 150px;min-width:130px}
+#app.portrait #ctrl select,#app.portrait #ctrl button{padding:4px 8px;font-size:12px}
+</style>
+</head>
+<body>
+<div id="app">
+  <header><h1>命題樹探索器</h1><span>526 條命題依十進位編號長成一棵樹；點光點看原文</span>
+    <form id="find" autocomplete="off"><input id="q" class="mono" placeholder="編號 2.0121" inputmode="decimal" aria-label="輸入命題編號"><button type="submit">前往</button></form>
+  </header>
+  <div id="stage" class="box"><canvas id="cv" aria-label="命題樹，可拖曳平移、滾輪或兩指縮放，點選光點查看命題"></canvas>
+    <div id="legend"></div><div id="tip"></div><span class="tag">資料：全書 526 條・即時排版</span></div>
+  <div id="side" class="box">
+    <div id="info"></div>
+    <div id="stats">
+      <div><small>顯示中</small><b id="sVis">—</b></div>
+      <div><small>最外層</small><b id="sLay">—</b></div>
+      <div><small>子樹大小</small><b id="sSub">—</b></div>
+      <div><small>到主命題</small><b id="sUp">—</b></div>
+    </div>
+  </div>
+  <div id="ctrl" class="box">
+    <label class="grow">展開深度 <input id="dep" type="range" min="0" max="5" step="1" value="5"><output id="oDep">5</output></label>
+    <label>著色 <select id="mode"><option value="m">依主命題</option><option value="d">依深度</option><option value="e">依集數</option></select></label>
+    <button id="home">↺ 重設視角</button>
+  </div>
+</div>
+<script src="../data/tlp_props.js"></script>
+<script>
+(() => {
+"use strict";
+const $ = id => document.getElementById(id);
+const RAW = window.TLP_PROPS || [];
+const MAIN_COL = ["", "#C9B98F", "#5FB8A6", "#D4A84B", "#6FA3D8", "#8E86D6", "#B98AC2", "#F2EEE4"];
+const DEPTH_COL = ["#F2EEE4", "#D4A84B", "#C9B98F", "#5FB8A6", "#6FA3D8", "#8E86D6"];
+const EP_COL = {}; // 12 集：沿色相環取色
+for (let i = 1; i <= 12; i++) EP_COL["u" + String(i).padStart(2, "0")] = `hsl(${(i * 29 + 30) % 360} 52% 62%)`;
+
+// ---------- 建樹（照書中順序） ----------
+const N = RAW.map((r, i) => ({ ...r, i, kids: [], sub: 1, x: 0, y: 0, tx: 0, ty: 0, a: 0, vis: true }));
+const BY = new Map(N.map(n => [n.n, n]));
+const ROOT = { n: "TLP", d: -1, kids: [], x: 0, y: 0, tx: 0, ty: 0 };
+N.forEach(n => (n.p ? BY.get(n.p) : ROOT).kids.push(n));
+const sizeOf = n => { n.sub = 1; for (const k of n.kids) n.sub += sizeOf(k); return n.sub; };
+N.filter(n => !n.p).forEach(sizeOf);
+const MAXD = Math.max(...N.map(n => n.d));
+const perDepth = Array(MAXD + 1).fill(0); N.forEach(n => perDepth[n.d]++);
+
+// ---------- 放射狀排版：可見葉子平分圓周，主幹之間留空隙 ----------
+let D = MAXD;
+const RR = d => (1.6 + d) / (1.6 + D);          // 主幹圈放大一點，避免中心擁擠
+function layout() {
+  N.forEach(n => n.vis = n.d <= D);
+  const leaves = n => (n.d >= D || !n.kids.length) ? 1 : n.kids.reduce((s, k) => s + leaves(k), 0);
+  const mains = ROOT.kids, gap = 0.05;                 // 主幹間隙（弧度比例）
+  const total = mains.reduce((s, m) => s + leaves(m), 0);
+  const span = Math.PI * 2 * (1 - gap * mains.length / (Math.PI * 2) * 2);
+  let a0 = -Math.PI / 2 + gap;
+  const place = (n, from, to) => {
+    n.a = (from + to) / 2;
+    const r = RR(n.d);
+    n.tx = r * Math.cos(n.a); n.ty = r * Math.sin(n.a);
+    if (n.d >= D) return;
+    const L = leaves(n); let s = from;
+    for (const k of n.kids) { const w = (to - from) * leaves(k) / L; place(k, s, s + w); s += w; }
+  };
+  for (const m of mains) { const w = span * leaves(m) / total; place(m, a0, a0 + w); a0 += w + gap * 2; }
+}
+
+// ---------- 畫布、視角 ----------
+const cv = $("cv"), ctx = cv.getContext("2d"), app = $("app");
+let W = 0, H = 0, view = { s: 1, ox: 0, oy: 0 }, anim = 1, animFrom = null;
+function fit() {
+  app.classList.toggle("portrait", innerHeight > innerWidth * 1.05);
+  const r = cv.getBoundingClientRect(), dpr = Math.min(devicePixelRatio || 1, 2);
+  W = r.width; H = r.height; cv.width = Math.max(1, W * dpr | 0); cv.height = Math.max(1, H * dpr | 0);
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0); draw();
+}
+const R0 = () => Math.min(W, H) * 0.46;
+const toScr = (x, y) => [W / 2 + view.ox + x * R0() * view.s, H / 2 + view.oy + y * R0() * view.s];
+const toWorld = (sx, sy) => [(sx - W / 2 - view.ox) / (R0() * view.s), (sy - H / 2 - view.oy) / (R0() * view.s)];
+function zoomAt(sx, sy, f) {
+  const ns = Math.min(40, Math.max(0.6, view.s * f)); f = ns / view.s;
+  view.ox = (view.ox - (sx - W / 2)) * f + (sx - W / 2); view.oy = (view.oy - (sy - H / 2)) * f + (sy - H / 2); view.s = ns; draw();
+}
+function centerOn(n) {
+  const targetS = Math.max(view.s, n.d >= 3 ? 4 : n.d >= 1 ? 2 : 1);
+  const r = R0() * targetS; view.s = targetS; view.ox = -n.tx * r; view.oy = -n.ty * r;
+}
+
+// ---------- 著色 ----------
+let mode = "m", sel = null, hover = null;
+const colOf = n => mode === "m" ? MAIN_COL[n.m] : mode === "d" ? DEPTH_COL[n.d] : (EP_COL[n.e] || "#888");
+function legend() {
+  const el = $("legend");
+  if (mode === "m") el.innerHTML = "主命題" + [1, 2, 3, 4, 5, 6, 7].map(k => `<i style="background:${MAIN_COL[k]}"></i>${k}`).join("");
+  else if (mode === "d") el.innerHTML = "深度" + DEPTH_COL.map((c, k) => `<i style="background:${c}"></i>${k}`).join("");
+  else {
+    const eps = [...new Set(N.map(n => n.e))].sort();
+    el.innerHTML = "集數" + eps.map(e => `<i style="background:${EP_COL[e]}"></i>EP${e.slice(1)}`).join("");
+  }
+}
+
+// ---------- 繪圖 ----------
+function draw() {
+  if (!W) return;
+  ctx.clearRect(0, 0, W, H);
+  const t = anim < 1 ? 1 - Math.pow(1 - anim, 3) : 1;
+  N.forEach(n => { if (animFrom) { const f = animFrom.get(n); n.x = f.x + (n.tx - f.x) * t; n.y = f.y + (n.ty - f.y) * t; } else { n.x = n.tx; n.y = n.ty; } });
+  // 深度環
+  ctx.strokeStyle = "rgba(237,230,214,.06)"; ctx.lineWidth = 1;
+  const c = toScr(0, 0);
+  for (let d = 0; d <= D; d++) { ctx.beginPath(); ctx.arc(c[0], c[1], RR(d) * R0() * view.s, 0, 7); ctx.stroke(); }
+  // 路徑集合
+  const path = new Set(); for (let p = sel; p; p = p.p ? BY.get(p.p) : null) path.add(p);
+  // 邊
+  ctx.lineWidth = 1;
+  for (const n of N) {
+    if (!n.vis) continue;
+    const p = n.p ? BY.get(n.p) : null, a = p ? toScr(p.x, p.y) : c, b = toScr(n.x, n.y);
+    const onPath = path.has(n);
+    ctx.strokeStyle = onPath ? "#D4A84B" : colOf(n); ctx.globalAlpha = onPath ? 1 : (sel ? 0.18 : 0.35);
+    ctx.lineWidth = onPath ? 2.2 : 1;
+    ctx.beginPath(); ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]); ctx.stroke();
+  }
+  ctx.globalAlpha = 1;
+  // 中心
+  ctx.fillStyle = "#EDE6D6"; ctx.beginPath(); ctx.arc(c[0], c[1], 4, 0, 7); ctx.fill();
+  // 點
+  const labelDepth = view.s < 1.6 ? 0 : view.s < 3 ? 1 : view.s < 5.5 ? 2 : view.s < 10 ? 3 : 5;
+  const rad = d => Math.max(1.6, (d === 0 ? 7 : 4.2 - d * 0.55) * Math.min(2.2, Math.sqrt(view.s)));
+  const kidsOfSel = new Set(sel ? sel.kids : []);
+  for (const n of N) {
+    if (!n.vis) continue;
+    const [x, y] = toScr(n.x, n.y); if (x < -20 || y < -20 || x > W + 20 || y > H + 20) continue;
+    const r = rad(n.d), dim = sel && !path.has(n) && !kidsOfSel.has(n);
+    ctx.globalAlpha = dim ? 0.45 : 1; ctx.fillStyle = colOf(n);
+    ctx.beginPath(); ctx.arc(x, y, r, 0, 7); ctx.fill();
+    if (n === sel || n === hover) { ctx.globalAlpha = 1; ctx.strokeStyle = "#EDE6D6"; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(x, y, r + 4, 0, 7); ctx.stroke(); }
+    else if (kidsOfSel.has(n)) { ctx.globalAlpha = 1; ctx.strokeStyle = "#5FB8A6"; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.arc(x, y, r + 3, 0, 7); ctx.stroke(); }
+    if (n.d <= labelDepth || n === sel || path.has(n) || kidsOfSel.has(n)) {
+      ctx.globalAlpha = dim ? 0.5 : 1;
+      ctx.font = (n.d === 0 ? "600 13px" : "11px") + " 'JetBrains Mono',monospace";
+      ctx.fillStyle = n === sel ? "#D4A84B" : "#EDE6D6";
+      const ox = Math.cos(n.a), oy = Math.sin(n.a);
+      ctx.textAlign = ox > 0.2 ? "left" : ox < -0.2 ? "right" : "center"; ctx.textBaseline = "middle";
+      ctx.fillText(n.n, x + ox * (r + 6), y + oy * (r + 8));
+    }
+  }
+  ctx.globalAlpha = 1;
+}
+function tick() {
+  if (anim < 1) { anim = Math.min(1, anim + 0.06); draw(); if (anim >= 1) animFrom = null; }
+  requestAnimationFrame(tick);
+}
+
+// ---------- 資訊面板 ----------
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const fmt = s => esc(s).replace(/\*([^*\n]+)\*/g, "<i>$1</i>");
+const chip = n => `<button class="chip" data-n="${esc(n.n)}" style="border-left:3px solid ${colOf(n)}">${esc(n.n)}</button>`;
+function showInfo() {
+  const el = $("info");
+  if (!sel) {
+    el.innerHTML = `<h2>全書地圖</h2><p style="color:var(--sub);margin:4px 0 8px">七根主幹，從「世界」走到「沉默」。點任一顆光點，或在上方輸入編號。</p>
+      <div class="kids">${ROOT.kids.map(chip).join("")}</div>
+      <p style="margin-top:10px;color:var(--sub);font-size:12px">編號規則（第 1 條附註）：n.1、n.2 是對 n 的註解，n.m1、n.m2 是對 n.m 的註解。</p>`;
+    $("sSub").textContent = "526"; $("sUp").textContent = "—"; return;
+  }
+  const chain = []; for (let p = sel.p ? BY.get(sel.p) : null; p; p = p.p ? BY.get(p.p) : null) chain.unshift(p);
+  el.innerHTML = `<h2><span class="dot" style="background:${MAIN_COL[sel.m]}"></span>${esc(sel.n)}
+      <small>主命題 ${sel.m}・深度 ${sel.d}・EP${esc(sel.e.slice(1))}</small></h2>
+    <div class="crumb">${chain.length ? "父命題鏈：" + chain.map(chip).join(" › ") + " › <b class='mono' style='color:var(--gold)'>" + esc(sel.n) + "</b>" : "主命題（沒有父命題）"}</div>
+    <div class="lang zh"><b>中文（本系列自譯）</b><p>${sel.zh ? fmt(sel.zh) : "<span style='color:var(--sub)'>（中文譯文尚未收錄進資料檔）</span>"}</p></div>
+    <div class="lang de"><b>DEUTSCH 1921</b><p>${fmt(sel.de)}</p></div>
+    <div class="lang en"><b>ENGLISH · OGDEN 1922</b><p>${fmt(sel.en)}</p></div>
+    <div style="margin-top:6px;font-size:12px;color:var(--sub)">${sel.kids.length ? `直接子命題 ${sel.kids.length} 條（青綠圈）` : "沒有子命題：這是一片葉子"}</div>
+    <div class="kids">${sel.kids.map(chip).join("")}</div>`;
+  $("sSub").textContent = sel.sub; $("sUp").textContent = sel.d + " 步";
+}
+function stats() {
+  $("sVis").textContent = N.filter(n => n.vis).length;
+  $("sLay").textContent = perDepth[D] + " 條";
+}
+function select(n, center) {
+  sel = n;
+  if (n && n.d > D) { setDepth(n.d); }
+  if (n && center) centerOn(n);
+  showInfo(); draw();
+}
+function setDepth(d) {
+  animFrom = new Map(N.map(n => [n, { x: n.x, y: n.y }])); anim = 0;
+  D = d; $("dep").value = d; $("oDep").textContent = d; layout(); stats();
+  if (sel && sel.d > D) { sel = null; showInfo(); }
+}
+
+// ---------- 互動：平移、縮放、點選 ----------
+const ptrs = new Map(); let downPos = null, moved = 0, pinch0 = null;
+function pick(sx, sy) {
+  let best = null, bd = 18 * 18;
+  for (const n of N) { if (!n.vis) continue; const [x, y] = toScr(n.x, n.y), d = (x - sx) ** 2 + (y - sy) ** 2; if (d < bd) { bd = d; best = n; } }
+  return best;
+}
+const local = e => { const r = cv.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top]; };
+cv.addEventListener("pointerdown", e => {
+  cv.setPointerCapture(e.pointerId); ptrs.set(e.pointerId, local(e));
+  if (ptrs.size === 1) { downPos = local(e); moved = 0; }
+  if (ptrs.size === 2) { const [a, b] = [...ptrs.values()]; pinch0 = { d: Math.hypot(a[0] - b[0], a[1] - b[1]), s: view.s }; }
+});
+cv.addEventListener("pointermove", e => {
+  const p = local(e);
+  if (!ptrs.has(e.pointerId)) {
+    if (e.pointerType === "mouse") {
+      const n = pick(p[0], p[1]); if (n !== hover) { hover = n; draw(); }
+      const tip = $("tip");
+      if (n) { tip.style.display = "block"; tip.innerHTML = `<b class="mono">${esc(n.n)}</b> ${fmt((n.zh || n.en).slice(0, 70))}${(n.zh || n.en).length > 70 ? "…" : ""}`;
+        tip.style.left = Math.min(p[0] + 14, W - 270) + "px"; tip.style.top = Math.min(p[1] + 14, H - 60) + "px"; }
+      else tip.style.display = "none";
+    }
+    return;
+  }
+  const prev = ptrs.get(e.pointerId); ptrs.set(e.pointerId, p);
+  if (ptrs.size === 1) { view.ox += p[0] - prev[0]; view.oy += p[1] - prev[1]; moved += Math.abs(p[0] - prev[0]) + Math.abs(p[1] - prev[1]); draw(); }
+  else if (ptrs.size === 2 && pinch0) {
+    const [a, b] = [...ptrs.values()], d = Math.hypot(a[0] - b[0], a[1] - b[1]);
+    moved = 99; zoomAt((a[0] + b[0]) / 2, (a[1] + b[1]) / 2, pinch0.s * d / pinch0.d / view.s);
+  }
+});
+const up = e => {
+  if (ptrs.size === 1 && moved < 6 && downPos) { const n = pick(downPos[0], downPos[1]); select(n, false); }
+  ptrs.delete(e.pointerId); if (ptrs.size < 2) pinch0 = null; if (!ptrs.size) downPos = null;
+};
+cv.addEventListener("pointerup", up); cv.addEventListener("pointercancel", up);
+cv.addEventListener("pointerleave", () => { if (hover) { hover = null; draw(); } $("tip").style.display = "none"; });
+cv.addEventListener("wheel", e => { e.preventDefault(); const p = local(e); zoomAt(p[0], p[1], Math.exp(-e.deltaY * 0.0015)); }, { passive: false });
+
+$("info").addEventListener("click", e => { const b = e.target.closest("[data-n]"); if (b) select(BY.get(b.dataset.n), true); });
+$("dep").oninput = e => setDepth(+e.target.value);
+$("mode").onchange = e => { mode = e.target.value; legend(); showInfo(); draw(); };
+$("home").onclick = () => { view = { s: 1, ox: 0, oy: 0 }; select(null); };
+$("find").onsubmit = e => {
+  e.preventDefault();
+  const v = $("q").value.trim().replace(/[。．]/g, ".").replace(/^0+(?=\d)/, "");
+  const n = BY.get(v);
+  if (n) { $("q").style.borderColor = ""; select(n, true); }
+  else { $("q").style.borderColor = "#C9644A"; }
+};
+
+if (!N.length) { $("info").innerHTML = "<p>找不到命題資料（../data/tlp_props.js）。</p>"; }
+layout(); N.forEach(n => { n.x = n.tx; n.y = n.ty; });
+legend(); stats(); showInfo();
+new ResizeObserver(fit).observe(document.body);
+requestAnimationFrame(tick);
+})();
+</script>
+</body>
+</html>

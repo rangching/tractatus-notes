@@ -1,0 +1,287 @@
+<!doctype html>
+<html lang="zh-Hant-TW">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>投影規則</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@400;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#0E0F12;--panel:rgba(20,22,27,.92);--line:#2A2D35;--txt:#EDE6D6;--sub:#9C9688;--gold:#D4A84B;--blue:#6FA3D8;--true:#5FB8A6;--false:#C9644A;--p4:#6FA3D8}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{background:var(--bg);color:var(--txt);font-family:"Noto Serif TC","PingFang TC",serif;overflow-x:hidden;-webkit-tap-highlight-color:transparent}
+body{background-image:linear-gradient(rgba(237,230,214,.035) 1px,transparent 1px),linear-gradient(90deg,rgba(237,230,214,.035) 1px,transparent 1px);background-size:22px 22px}
+.mono{font-family:"JetBrains Mono",ui-monospace,Menlo,monospace}
+#app{display:grid;gap:8px;padding:8px;grid-template-columns:minmax(0,1.5fr) minmax(0,1fr);grid-template-rows:auto minmax(0,1fr) auto;grid-template-areas:"head head" "stage side" "ctrl ctrl";height:100vh}
+#app.portrait{height:auto;grid-template-columns:minmax(0,1fr);grid-template-rows:auto auto auto auto;grid-template-areas:"head" "stage" "ctrl" "side"}
+header{grid-area:head;display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}
+header h1{font-size:15px;color:var(--gold)}
+header span{font-size:12px;color:var(--sub)}
+.box{background:var(--panel);border:1px solid var(--line);border-radius:10px;position:relative;min-width:0;min-height:0}
+#stage{grid-area:stage;overflow:hidden}
+#app.portrait #stage{height:min(150vw,640px)}
+#app.portrait.single #stage{height:min(100vw,420px)}
+canvas{display:block;width:100%;height:100%;touch-action:manipulation}
+#side{grid-area:side;overflow-y:auto;padding:10px;display:flex;flex-direction:column;gap:8px}
+table{width:100%;border-collapse:collapse;font-size:12px}
+th{color:var(--sub);font-weight:400;text-align:left;padding:3px 4px;border-bottom:1px solid var(--line);white-space:nowrap}
+td{padding:4px;border-bottom:1px dashed rgba(237,230,214,.08);font-family:"JetBrains Mono",monospace;font-size:11.5px;word-break:break-all}
+td.ok{color:var(--true)}td.ng{color:var(--false)}
+#verdict{border:1px solid var(--line);border-radius:8px;padding:8px 10px;font-size:13px;line-height:1.55}
+#verdict.t{border-color:var(--true)}#verdict.f{border-color:var(--false)}
+#verdict b{font-size:16px}
+#verdict.t b{color:var(--true)}#verdict.f b{color:var(--false)}
+.small{font-size:12px;color:var(--sub);line-height:1.6}
+#ctrl{grid-area:ctrl;display:flex;flex-wrap:wrap;align-items:center;gap:6px 8px;padding:8px}
+button,select{background:#1A1C22;color:var(--txt);border:1px solid var(--line);border-radius:8px;padding:6px 10px;font:inherit;font-size:13px;cursor:pointer;min-height:34px}
+button:active{background:#262A31}
+button.on{border-color:var(--gold);color:var(--gold)}
+.seg{display:flex;gap:0}
+.seg button{border-radius:0;margin-left:-1px}
+.seg button:first-child{border-radius:8px 0 0 8px;margin-left:0}
+.seg button:last-child{border-radius:0 8px 8px 0}
+label{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--sub)}
+input[type=range]{accent-color:var(--gold);width:110px}
+</style>
+</head>
+<body>
+<div id="app">
+  <header><h1>投影規則：波形、溝紋、樂譜</h1><span>同一段旋律的三種表示，共享同一個邏輯構造（4.014–4.0141）</span></header>
+  <div id="stage" class="box"><canvas id="cv" aria-label="同一段旋律的聲波、唱片溝紋與樂譜"></canvas></div>
+  <div id="side" class="box">
+    <div id="verdict"></div>
+    <table><thead><tr><th>來源</th><th>讀出的音高序列</th><th></th></tr></thead><tbody id="tb"></tbody></table>
+    <div class="small" id="info"></div>
+  </div>
+  <div id="ctrl" class="box">
+    <div class="seg" id="views">
+      <button data-v="all" class="on">三者並列</button><button data-v="wave">聲波</button><button data-v="groove">溝紋</button><button data-v="score">樂譜</button>
+    </div>
+    <button id="bPlay">▶ 播放（點了才發聲）</button>
+    <button id="bNew">換一段旋律</button>
+    <label>移調 <input id="sT" type="range" min="-5" max="5" step="1" value="0"><output class="mono" id="oT">0</output></label>
+    <label>刻片轉速 <select id="rpmW"><option value="33.333">33⅓ rpm</option><option value="45">45 rpm</option><option value="78">78 rpm</option></select></label>
+    <label>讀片時假設 <select id="rpmR"><option value="33.333">33⅓ rpm</option><option value="45">45 rpm</option><option value="78">78 rpm</option></select></label>
+  </div>
+</div>
+<script>
+(() => {
+"use strict";
+const $ = id => document.getElementById(id);
+const C = { txt: "#EDE6D6", sub: "#9C9688", gold: "#D4A84B", blue: "#6FA3D8", t: "#5FB8A6", f: "#C9644A", line: "#2A2D35", grid: "rgba(237,230,214,.08)" };
+// ---------- 旋律（與 _units/calc_u06.py 相同的產生器） ----------
+const SCALE = [60, 62, 64, 65, 67, 69, 71, 72, 74, 76];
+function melody(seed, n = 8) {
+  let s = seed, deg = 2; const out = [];
+  for (let i = 0; i < n; i++) {
+    if (i === n - 1) deg = 0;
+    else if (i > 0) {
+      s = (Math.imul(s, 1103515245) + 12345) & 0x7fffffff;
+      deg += [-2, -1, 1, 2][(s >>> 16) & 3];
+      if (deg < 0) deg = -deg; if (deg > 9) deg = 18 - deg;
+    }
+    out.push(SCALE[deg]);
+  }
+  return out;
+}
+const NAMES = ["C", "C♯", "D", "D♯", "E", "F", "F♯", "G", "G♯", "A", "A♯", "B"];
+const nm = m => NAMES[((m % 12) + 12) % 12] + (Math.floor(m / 12) - 1);
+const freq = m => 440 * Math.pow(2, (m - 69) / 12);
+const midiOf = f => Math.round(69 + 12 * Math.log2(f / 440));
+
+// ---------- 投影規則 1：音高 → 聲波（顯示頻率 = 真實頻率 / 25，否則一秒有幾百個波畫不出來） ----------
+const SR = 1000, DUR = 0.4, GAP = 0.05, DOWN = 25;
+function render(mel) {
+  const per = Math.round(DUR * SR), gap = Math.round(GAP * SR), sig = new Float32Array(mel.length * (per + gap));
+  mel.forEach((m, j) => {
+    const f = freq(m) / DOWN, o = j * (per + gap);
+    for (let i = 0; i < per; i++) { const t = i / SR; sig[o + i] = Math.sin(Math.PI * t / DUR) * Math.sin(2 * Math.PI * f * t); }
+  });
+  return sig;
+}
+// 反方向：由取樣讀回音高（找有聲段落 → 內插過零點 → 頻率）；scale 為讀取時時間軸的換算倍數
+function decode(sig, scale) {
+  const segs = [], n = sig.length, quiet = k => { for (let q = k; q < Math.min(n, k + 10); q++) if (Math.abs(sig[q]) > 1e-6) return false; return true; };
+  for (let i = 0; i < n;) {
+    if (Math.abs(sig[i]) > 1e-6) { let j = i; while (j < n && !quiet(j)) j++; segs.push([i, j]); i = j; } else i++;
+  }
+  return segs.map(([a, b]) => {
+    const zs = [];
+    for (let k = a + 1; k < b; k++) if ((sig[k - 1] < 0) !== (sig[k] < 0)) zs.push((k - 1 + sig[k - 1] / (sig[k - 1] - sig[k])) / SR);
+    if (zs.length < 3) return null;
+    return midiOf((zs.length - 1) / 2 / (zs[zs.length - 1] - zs[0]) * DOWN * scale);
+  });
+}
+// ---------- 投影規則 2：聲波 → 溝紋（等角速旋轉的螺旋，橫向擺動 = 聲波） ----------
+const R0 = 1, PITCH = 0.08, AMP = 0.022;
+function cutGroove(sig, rpm) {
+  const w = 2 * Math.PI * rpm / 60, pts = new Float32Array(sig.length * 2);
+  for (let i = 0; i < sig.length; i++) {
+    const th = w * i / SR, r = R0 - PITCH * th / (2 * Math.PI) + AMP * sig[i];
+    pts[2 * i] = r * Math.cos(th); pts[2 * i + 1] = r * Math.sin(th);
+  }
+  return pts;
+}
+// 讀溝紋：從幾何點量出半徑，扣掉螺旋本身，得到擺動；再用「假設的轉速」把角度換回時間
+function readGroove(pts) {
+  const n = pts.length / 2, dev = new Float32Array(n); let prev = 0, turns = 0;
+  for (let i = 0; i < n; i++) {
+    let th = Math.atan2(pts[2 * i + 1], pts[2 * i]); if (th < 0) th += 2 * Math.PI;
+    if (i && th < prev - Math.PI) turns++; prev = th;
+    const T = th + 2 * Math.PI * turns, base = R0 - PITCH * T / (2 * Math.PI);
+    const v = (Math.hypot(pts[2 * i], pts[2 * i + 1]) - base) / AMP;
+    dev[i] = Math.abs(v) < 1e-4 ? 0 : v;
+  }
+  return dev;
+}
+// ---------- 投影規則 3：音高 → 樂譜（高音譜號；升記號拼法） ----------
+const LETTER = [0, 0, 1, 1, 2, 3, 3, 4, 4, 5, 5, 6], SHARP = [0, 1, 0, 1, 0, 0, 1, 0, 1, 0, 1, 0], NAT = [0, 2, 4, 5, 7, 9, 11];
+function toScore(mel) { return mel.map(m => { const pc = ((m % 12) + 12) % 12, oct = Math.floor(m / 12) - 1; return { step: (oct - 4) * 7 + LETTER[pc], sharp: SHARP[pc] }; }); }
+function readScore(notes) { return notes.map(({ step, sharp }) => { const oct = Math.floor(step / 7) + 4, l = ((step % 7) + 7) % 7; return 12 * (oct + 1) + NAT[l] + sharp; }); }
+
+// ---------- 狀態 ----------
+let seed = 3, transpose = 0, rpmW = 100 / 3, rpmR = 100 / 3, view = "all";
+let mel, sig, groove, score, decW, decG, decS, grooveDev;
+function compute() {
+  mel = melody(seed).map(m => m + transpose);
+  sig = render(mel); groove = cutGroove(sig, rpmW); score = toScore(mel);
+  decW = decode(sig, 1);
+  grooveDev = readGroove(groove);
+  decG = decode(grooveDev, rpmR / rpmW);   // 第 i 個取樣的角度 θ = ω刻·i/SR；用假設的 ω讀 換回時間，頻率就乘上 ω讀/ω刻
+  decS = readScore(score);
+  table(); draw();
+}
+const ints = a => a.slice(1).map((v, i) => v - a[i]);
+const fmtInt = a => a.map(v => (v > 0 ? "+" : "") + v).join(" ");
+function table() {
+  const rows = [["原本的音高", mel], ["由聲波讀回", decW], ["由溝紋讀回", decG], ["由樂譜讀回", decS]];
+  const eq = a => a.length === mel.length && a.every((v, i) => v === mel[i]);
+  $("tb").innerHTML = rows.map(([k, a], i) => `<tr><td style="font-family:'Noto Serif TC',serif">${k}</td><td>${a.map(m => m == null ? "?" : nm(m)).join(" ")}</td><td class="${i === 0 ? "" : eq(a) ? "ok" : "ng"}">${i === 0 ? "" : eq(a) ? "✓" : "✗"}</td></tr>`).join("");
+  const allOk = eq(decW) && eq(decG) && eq(decS);
+  const v = $("verdict");
+  if (allOk) { v.className = "t"; v.innerHTML = `<b>✓ 三種表示共享同一個邏輯構造</b><br>依投影規則，從聲波、溝紋、樂譜都能讀回同一串音高；三者長得完全不像，內在的結構卻一模一樣（4.014）。`; }
+  else { v.className = "f"; v.innerHTML = `<b>✗ 讀錯了投影規則</b><br>溝紋本身沒變，但用 ${fmtR(rpmR)} 去讀 ${fmtR(rpmW)} 刻的唱片，每個音都偏了（約 ${(12 * Math.log2(rpmR / rpmW)).toFixed(1)} 個半音）。溝紋要和「規則」一起，才是那首曲子的圖像（4.0141）。`; }
+  $("info").innerHTML = `音程序列（相鄰兩音差幾個半音）：<span class="mono">${fmtInt(ints(mel))}</span>　移調時每個音都變了，這串數字卻不變。<br>
+    溝紋：${fmtR(rpmW)} 刻片，${mel.length} 個音共 ${(sig.length / SR).toFixed(2)} 秒，轉了 <span class="mono">${(rpmW / 60 * sig.length / SR).toFixed(2)}</span> 圈。<br>
+    為了看得見，聲波與溝紋的振動頻率都縮小為 1/${DOWN} 顯示；播放時用的是真實頻率（${nm(mel[0])} ≈ ${freq(mel[0]).toFixed(1)} Hz）。`;
+}
+const fmtR = r => Math.abs(r - 100 / 3) < 0.01 ? "33⅓ rpm" : r + " rpm";
+
+// ---------- 繪圖 ----------
+const app = $("app"), cv = $("cv"), ctx = cv.getContext("2d");
+let W = 0, H = 0, play = null;
+function layout() {
+  app.classList.toggle("portrait", window.innerWidth < 640 || window.innerHeight > window.innerWidth * 1.05);
+  app.classList.toggle("single", view !== "all");
+  const r = cv.getBoundingClientRect(), dpr = Math.min(window.devicePixelRatio || 1, 2);
+  W = r.width; H = r.height; cv.width = Math.max(1, Math.round(W * dpr)); cv.height = Math.max(1, Math.round(H * dpr));
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0); draw();
+}
+new ResizeObserver(layout).observe(document.body);
+const per = () => Math.round(DUR * SR) + Math.round(GAP * SR);
+function label(t, x, y) { ctx.fillStyle = C.sub; ctx.font = "12px 'Noto Serif TC',serif"; ctx.textAlign = "left"; ctx.fillText(t, x, y); }
+function drawWave(x, y, w, h) {
+  label("聲波（空氣壓力隨時間）", x + 4, y + 14);
+  const mid = y + h / 2 + 6, A = (h - 30) / 2;
+  ctx.strokeStyle = C.grid; ctx.beginPath(); ctx.moveTo(x, mid); ctx.lineTo(x + w, mid); ctx.stroke();
+  ctx.strokeStyle = C.blue; ctx.lineWidth = 1.3; ctx.beginPath();
+  const n = sig.length;
+  for (let px = 0; px <= w; px += 0.5) { const i = Math.min(n - 1, Math.floor(px / w * n)); const yy = mid - A * sig[i]; px ? ctx.lineTo(x + px, yy) : ctx.moveTo(x + px, yy); }
+  ctx.stroke();
+  for (let j = 0; j < mel.length; j++) {
+    const cx = x + (j * per() + DUR * SR / 2) / n * w;
+    ctx.fillStyle = play && play.j === j ? C.gold : C.sub; ctx.font = "10px 'JetBrains Mono',monospace"; ctx.textAlign = "center"; ctx.fillText(nm(mel[j]), cx, y + h - 3);
+  }
+  if (play) { const px = x + play.i / n * w; ctx.strokeStyle = C.gold; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(px, y + 20); ctx.lineTo(px, y + h - 14); ctx.stroke(); }
+}
+function drawGroove(x, y, w, h) {
+  label("唱片溝紋（螺旋的橫向擺動）", x + 4, y + 14);
+  const S = Math.min(w, h - 24) / 2 - 6, cx = x + w / 2, cy = y + 20 + (h - 20) / 2;
+  ctx.fillStyle = "#08090B"; ctx.beginPath(); ctx.arc(cx, cy, S * 1.04, 0, 7); ctx.fill();
+  ctx.fillStyle = "#2B2214"; ctx.beginPath(); ctx.arc(cx, cy, S * 0.28, 0, 7); ctx.fill();
+  ctx.fillStyle = C.gold; ctx.beginPath(); ctx.arc(cx, cy, 2.5, 0, 7); ctx.fill();
+  const n = groove.length / 2;
+  ctx.strokeStyle = C.gold; ctx.lineWidth = 0.9; ctx.globalAlpha = 0.9; ctx.beginPath();
+  for (let i = 0; i < n; i++) { const px = cx + S * groove[2 * i], py = cy - S * groove[2 * i + 1]; i ? ctx.lineTo(px, py) : ctx.moveTo(px, py); }
+  ctx.stroke(); ctx.globalAlpha = 1;
+  if (play) { const i = Math.min(n - 1, play.i); ctx.fillStyle = C.t; ctx.beginPath(); ctx.arc(cx + S * groove[2 * i], cy - S * groove[2 * i + 1], 4, 0, 7); ctx.fill(); }
+}
+function drawScore(x, y, w, h) {
+  label("樂譜（高音譜號）", x + 4, y + 14);
+  const sp = Math.min(10, (h - 40) / 12), top = y + 20 + (h - 20) / 2 - 2 * sp; // 五線譜：E4（step 2）在最下線
+  const yOf = step => top + 4 * sp - (step - 2) * sp / 2;
+  ctx.strokeStyle = "rgba(237,230,214,.55)"; ctx.lineWidth = 1;
+  for (let k = 0; k < 5; k++) { ctx.beginPath(); ctx.moveTo(x + 8, top + k * sp); ctx.lineTo(x + w - 8, top + k * sp); ctx.stroke(); }
+  ctx.fillStyle = C.txt; ctx.font = `${sp * 5.2}px serif`; ctx.textAlign = "left"; ctx.fillText("𝄞", x + 10, top + 3.6 * sp);
+  const x0 = x + 14 + sp * 3.6, dx = (w - (x0 - x) - 16) / mel.length;
+  score.forEach((nt, j) => {
+    const nx = x0 + dx * (j + 0.5), ny = yOf(nt.step), hl = play && play.j === j;
+    ctx.strokeStyle = "rgba(237,230,214,.55)";
+    for (let s = 0; s >= nt.step; s -= 2) { ctx.beginPath(); ctx.moveTo(nx - sp, yOf(s)); ctx.lineTo(nx + sp, yOf(s)); ctx.stroke(); }   // 下加線
+    for (let s = 12; s <= nt.step; s += 2) { ctx.beginPath(); ctx.moveTo(nx - sp, yOf(s)); ctx.lineTo(nx + sp, yOf(s)); ctx.stroke(); } // 上加線
+    ctx.fillStyle = hl ? C.gold : C.txt; ctx.beginPath(); ctx.ellipse(nx, ny, sp * 0.62, sp * 0.45, -0.35, 0, 7); ctx.fill();
+    ctx.strokeStyle = hl ? C.gold : C.txt; ctx.lineWidth = 1.2; ctx.beginPath();
+    if (nt.step < 6) { ctx.moveTo(nx + sp * 0.58, ny); ctx.lineTo(nx + sp * 0.58, ny - sp * 3.3); } else { ctx.moveTo(nx - sp * 0.58, ny); ctx.lineTo(nx - sp * 0.58, ny + sp * 3.3); }
+    ctx.stroke();
+    if (nt.sharp) { ctx.fillStyle = hl ? C.gold : C.txt; ctx.font = `${sp * 1.6}px serif`; ctx.textAlign = "center"; ctx.fillText("♯", nx - sp * 1.5, ny + sp * 0.5); }
+  });
+}
+function draw() {
+  if (!W || !mel) return;
+  ctx.clearRect(0, 0, W, H);
+  const pad = 8, portrait = app.classList.contains("portrait");
+  if (view === "wave") drawWave(pad, pad, W - 2 * pad, H - 2 * pad);
+  else if (view === "groove") drawGroove(pad, pad, W - 2 * pad, H - 2 * pad);
+  else if (view === "score") drawScore(pad, pad, W - 2 * pad, H - 2 * pad);
+  else if (portrait || W < H * 1.2) {
+    const h1 = (H - 2 * pad) * 0.25, h2 = (H - 2 * pad) * 0.27;
+    drawWave(pad, pad, W - 2 * pad, h1); drawScore(pad, pad + h1, W - 2 * pad, h2); drawGroove(pad, pad + h1 + h2, W - 2 * pad, H - 2 * pad - h1 - h2);
+  } else {
+    const gw = Math.min(H - 2 * pad, (W - 2 * pad) * 0.45), lw = W - 3 * pad - gw;
+    drawWave(pad, pad, lw, (H - 2 * pad) * 0.5); drawScore(pad, pad + (H - 2 * pad) * 0.5, lw, (H - 2 * pad) * 0.5); drawGroove(2 * pad + lw, pad, gw, H - 2 * pad);
+  }
+}
+
+// ---------- 播放：只有使用者點擊後才建立 AudioContext 並發聲 ----------
+let actx = null, raf = 0;
+function playMelody() {
+  if (play) { stop(); return; }
+  try { actx = actx || new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { actx = null; }
+  const t0 = actx ? actx.currentTime + 0.05 : performance.now() / 1000;
+  if (actx) {
+    actx.resume && actx.resume();
+    mel.forEach((m, j) => {
+      const o = actx.createOscillator(), g = actx.createGain(), s = t0 + j * (DUR + GAP);
+      o.type = "triangle"; o.frequency.value = freq(m);
+      g.gain.setValueAtTime(0, s); g.gain.linearRampToValueAtTime(0.22, s + 0.02); g.gain.linearRampToValueAtTime(0, s + DUR);
+      o.connect(g); g.connect(actx.destination); o.start(s); o.stop(s + DUR + 0.02);
+    });
+  }
+  const total = mel.length * (DUR + GAP);
+  $("bPlay").textContent = "■ 停止"; $("bPlay").classList.add("on");
+  const tick = () => {
+    const now = (actx ? actx.currentTime : performance.now() / 1000) - t0;
+    if (now >= total) { stop(); return; }
+    const i = Math.max(0, Math.floor(now * SR)); play = { i, j: Math.min(mel.length - 1, Math.floor(i / per())) };
+    draw(); raf = requestAnimationFrame(tick);
+  };
+  tick();
+}
+function stop() { cancelAnimationFrame(raf); play = null; $("bPlay").textContent = "▶ 播放（點了才發聲）"; $("bPlay").classList.remove("on"); if (actx && actx.state === "running") actx.suspend(); draw(); }
+
+// ---------- 控制 ----------
+$("bPlay").onclick = playMelody;
+$("bNew").onclick = () => { stop(); seed = seed % 97 + 1; compute(); };
+$("sT").oninput = e => { stop(); transpose = +e.target.value; $("oT").textContent = (transpose > 0 ? "+" : "") + transpose; compute(); };
+$("rpmW").onchange = e => { stop(); rpmW = +e.target.value; if (Math.abs(rpmW - 33.333) < 0.01) rpmW = 100 / 3; compute(); };
+$("rpmR").onchange = e => { stop(); rpmR = +e.target.value; if (Math.abs(rpmR - 33.333) < 0.01) rpmR = 100 / 3; compute(); };
+document.querySelectorAll("#views button").forEach(b => b.onclick = () => {
+  view = b.dataset.v; document.querySelectorAll("#views button").forEach(x => x.classList.toggle("on", x === b)); layout();
+});
+document.addEventListener("visibilitychange", () => { if (document.hidden && play) stop(); });
+compute(); layout();
+})();
+</script>
+</body>
+</html>
